@@ -6,6 +6,25 @@ import type { saveImages as saveImagesFn, toImageUrl as toImageUrlFn } from "./i
 import type { MuseClient } from "./muse-client.js";
 import type { MuseUsage, OutputFormat, ReasoningStrength } from "./types.js";
 
+/** 合法輸出格式清單，用於防禦 API 回應中非預期的 output_format 值 */
+const VALID_OUTPUT_FORMATS = ["png", "webp", "jpeg"] as const;
+
+/**
+ * 存檔時決定實際要用的格式。
+ * output_format 屬於 named 欄位，可被 extra_params 覆寫，因此 API 實際回傳的格式可能與請求時不同
+ * （例如 extra_params 帶了 output_format:"webp" 但請求時的 format 仍是預設的 png）。
+ * 存檔副檔名必須以回應回報的格式為準，否則會產生「副檔名與實際內容不符」的檔案。
+ * 若回應的值不在合法清單內（例如伺服器異常回傳了未知格式），退回請求時的格式，
+ * 避免 image-store.ts 的副檔名對照表查不到而產生 `.undefined` 檔名。
+ * @param responseFormat API 回應回報的 output_format
+ * @param requestFormat 這次請求時使用的 format（作為防禦性 fallback）
+ */
+function resolveActualFormat(responseFormat: unknown, requestFormat: OutputFormat): OutputFormat {
+  return (VALID_OUTPUT_FORMATS as readonly unknown[]).includes(responseFormat)
+    ? (responseFormat as OutputFormat)
+    : requestFormat;
+}
+
 /** 每張生成圖片的固定成本（美元） */
 const COST_PER_IMAGE_USD = 0.01;
 
@@ -138,9 +157,11 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           model: input.model,
           extraParams: input.extra_params
         });
+        // extra_params 可能覆寫了 output_format，實際格式以回應為準，避免副檔名與內容不符
+        const actualFormat = resolveActualFormat(response.output_format, format);
         const paths = await saveImages(
           response.data.map(item => item.b64_json),
-          { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse", format }
+          { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse", format: actualFormat }
         );
         return {
           content: [{ type: "text", text: formatResult(paths, response.usage, blockedWarning(blockedKeys)) }]
@@ -200,9 +221,11 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           model: input.model,
           extraParams: input.extra_params
         });
+        // extra_params 可能覆寫了 output_format，實際格式以回應為準，避免副檔名與內容不符
+        const actualFormat = resolveActualFormat(response.output_format, format);
         const paths = await saveImages(
           response.data.map(item => item.b64_json),
-          { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse-edit", format }
+          { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse-edit", format: actualFormat }
         );
         return {
           content: [{ type: "text", text: formatResult(paths, response.usage, blockedWarning(blockedKeys)) }]

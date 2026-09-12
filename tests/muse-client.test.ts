@@ -12,9 +12,10 @@ const CONFIG: Config = Object.freeze({
   extraParams: {}
 });
 
-/** 建立一個回傳指定 JSON 與狀態碼的 fetch 假物件 */
+/** 建立一個回傳指定 JSON 與狀態碼的 fetch 假物件。
+ *  參數需明確宣告型別，否則 mock.calls 會被推斷成零長度 tuple，取 calls[0]![1] 會編譯失敗。 */
 function fakeFetch(status: number, body: unknown) {
-  return vi.fn(async () =>
+  return vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
     new Response(typeof body === "string" ? body : JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json" }
@@ -356,7 +357,7 @@ describe("重試行為", () => {
 
   it("429 重試 3 次後放棄，共發出 4 次請求", async () => {
     const fetchImpl = fakeFetch(429, { error: { message: "slow down" } });
-    const sleep = vi.fn(async () => {});
+    const sleep = vi.fn(async (_ms: number) => {});
     const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep });
 
     await expect(client.generate({ prompt: "x" })).rejects.toMatchObject({ kind: "rate_limit" });

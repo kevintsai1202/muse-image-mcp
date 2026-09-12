@@ -231,6 +231,83 @@ describe("formatResult", () => {
   });
 });
 
+describe("output_format 以回應為準（I-1）", () => {
+  it("generate_image：response.output_format 與請求 format 不同時，saveImages 收到回應的格式", async () => {
+    const deps = makeDeps({
+      client: {
+        generate: vi.fn(async () => ({
+          // extra_params 覆寫了 output_format，API 實際回傳 webp，但請求時是 png
+          result: { created: 1, data: [{ b64_json: "AAAA" }], output_format: "webp" as const },
+          blockedKeys: [] as string[]
+        })),
+        edit: vi.fn(),
+        iterate: vi.fn()
+      }
+    });
+    const tools = createTools(deps);
+
+    await pick(tools, "generate_image").handler({
+      prompt: "p",
+      extra_params: { output_format: "webp" }
+    } as never);
+
+    expect(deps.saveImages).toHaveBeenCalledWith(["AAAA"], {
+      outputDir: "/out",
+      prefix: "muse",
+      format: "webp"
+    });
+  });
+
+  it("edit_image：response.output_format 與請求 format 不同時，saveImages 收到回應的格式", async () => {
+    const deps = makeDeps({
+      client: {
+        generate: vi.fn(),
+        edit: vi.fn(async () => ({
+          result: { created: 1, data: [{ b64_json: "BBBB" }], output_format: "jpeg" as const },
+          blockedKeys: [] as string[]
+        })),
+        iterate: vi.fn()
+      }
+    });
+    const tools = createTools(deps);
+
+    await pick(tools, "edit_image").handler({
+      prompt: "p",
+      images: ["http://example.test/a.png"],
+      extra_params: { output_format: "jpeg" }
+    } as never);
+
+    expect(deps.saveImages).toHaveBeenCalledWith(["BBBB"], {
+      outputDir: "/out",
+      prefix: "muse-edit",
+      format: "jpeg"
+    });
+  });
+
+  it("generate_image：response.output_format 為非預期值時退回請求 format", async () => {
+    const deps = makeDeps({
+      client: {
+        generate: vi.fn(async () => ({
+          // API 回傳了不在 png/webp/jpeg 之列的值（例如伺服器端異常或新格式尚未支援）
+          result: { created: 1, data: [{ b64_json: "AAAA" }], output_format: "bmp" as never },
+          blockedKeys: [] as string[]
+        })),
+        edit: vi.fn(),
+        iterate: vi.fn()
+      }
+    });
+    const tools = createTools(deps);
+
+    await pick(tools, "generate_image").handler({ prompt: "p", output_format: "png" } as never);
+
+    expect(deps.saveImages).toHaveBeenCalledWith(["AAAA"], {
+      outputDir: "/out",
+      prefix: "muse",
+      format: "png"
+    });
+  });
+});
+
 describe("模型與擴充參數", () => {
   it("generate_image 的 schema 含 model 與 extra_params", () => {
     const tools = createTools(makeDeps());

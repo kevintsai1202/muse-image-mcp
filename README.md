@@ -141,5 +141,5 @@ Task 7 以真實 API 做了兩輪對話：先呼叫一次 `iterate_image` 取得
 ```bash
 npm test          # 單元測試（不會打真實 API）
 npm run build     # 編譯到 dist/
-npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，共產生 4 張圖，約花費 US$0.04
+npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，共產生 6 張圖，約花費 US$0.06
 ```

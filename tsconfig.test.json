@@ -4,10 +4,5 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "tests/**/*.ts"],
-  // tests/smoke.e2e.test.ts 依規定全程不得修改，且與 vitest.config.ts 一致排除在一般測試流程之外；
-  // 該檔目前對 ClientResult<T> 包裝有型別落差（呼叫端仍假設舊的扁平回傳形狀），
-  // 這是先於本輪且與本輪 5 個 findings 無關的既有缺陷，不在本輪修復範圍內，
-  // 故比照 vitest.config.ts 的排除方式將它排除在型別檢查範圍之外，避免 typecheck 卡在一個不能碰的檔案上。
-  "exclude": ["tests/**/*.e2e.test.ts"]
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
 }

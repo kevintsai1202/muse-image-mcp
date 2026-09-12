@@ -16,7 +16,7 @@
 
 這些約束適用於**每一個** task，不再重複列出：
 
-- **Node 版本下限 `>=20`**（需要內建 `fetch`、`AbortSignal.timeout`）。開發機為 v24.15.0。
+- **Node 版本下限 `>=20.12.0`**（需要內建 `fetch`、`AbortSignal.timeout`、`process.loadEnvFile`）。開發機為 v24.15.0。
 - **ESM only**：`package.json` 設 `"type": "module"`；所有相對 import **必須帶 `.js` 副檔名**（例 `import { loadConfig } from "./config.js"`），即使原始檔是 `.ts`。這是 `nodenext` 模組解析的硬性要求，漏掉會在 runtime 炸。
 - **MCP SDK 用 1.x 寫法，不可用 2.x alpha 寫法**：
   - import 路徑為 `@modelcontextprotocol/sdk/server/mcp.js` 與 `@modelcontextprotocol/sdk/server/stdio.js`
@@ -81,7 +81,7 @@
   "type": "module",
   "bin": { "muse-image-mcp": "./dist/index.js" },
   "files": ["dist"],
-  "engines": { "node": ">=20" },
+  "engines": { "node": ">=20.12.0" },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -151,9 +151,9 @@ export default defineConfig({
 });
 ```
 
-- [ ] **Step 4: 建立 `.gitignore` 與 `.env.example`**
+- [x] **Step 4: 建立 `.gitignore` 與 `.env.example`**
 
-`.gitignore`：
+`.gitignore` **已於計畫階段提前建立**（因為開發者已在專案根目錄放了含真實 key 的 `.env`，機密檔案出現時忽略規則就必須已經到位）。內容如下，實作時確認其存在即可，不需重建：
 
 ```
 node_modules/
@@ -163,9 +163,15 @@ muse-output/
 *.log
 ```
 
-`.env.example`：
+驗證：`git check-ignore -v .env` 應輸出 `.gitignore:4:.env` 且 exit code 為 0。
+
+`.env.example`（仍需建立）：
 
 ```
+# 複製這個檔案為同目錄下的 .env 並填入實際值。
+# .env 由 server 從「套件根目錄」載入（非執行時的工作目錄），已列於 .gitignore。
+# 優先序：MCP 設定的 env 區塊 > .env 檔 > 程式內建預設值。
+
 # Meta Muse API key，於 https://dev.meta.ai 後台取得。切勿提交真實 key。
 MUSE_API_KEY=
 
@@ -448,17 +454,69 @@ git commit -m "feat: 專案骨架、共用型別與錯誤分類"
 
 **Interfaces:**
 - Consumes: `MuseError` from `src/errors.js`
-- Produces: `interface Config { apiKey: string; baseUrl: string; outputDir: string; timeoutMs: number }`、`loadConfig(env?: NodeJS.ProcessEnv): Config`
+- Produces:
+  - `interface Config { apiKey: string; baseUrl: string; outputDir: string; timeoutMs: number }`
+  - `loadConfig(env?: NodeJS.ProcessEnv): Config`
+  - `PACKAGE_ROOT: string`（套件根目錄絕對路徑）
+  - `loadDotEnvFile(envPath?: string): boolean`（載入 `.env`；成功回 `true`，檔案不存在或格式錯誤回 `false` 且不拋錯）
+
+**設定來源優先序**（spec §6.1）：MCP client 傳入的 `env` > 套件根目錄的 `.env` > 程式內建預設值。這個優先序不需要額外實作——Node 的 `process.loadEnvFile()` 本來就不覆寫已存在的環境變數（已於 v24.15.0 實測確認）。
 
 ---
 
 - [ ] **Step 1: 寫 `tests/config.test.ts`（失敗的測試）**
 
 ```ts
-import { describe, it, expect } from "vitest";
-import { resolve } from "node:path";
-import { loadConfig } from "../src/config.js";
+import { describe, it, expect, afterEach } from "vitest";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { loadConfig, loadDotEnvFile, PACKAGE_ROOT } from "../src/config.js";
 import { MuseError } from "../src/errors.js";
+
+/** 測試中被寫進 process.env 的變數，結束後要清掉避免污染其他測試 */
+const TEMP_ENV_KEYS = ["DOTENV_PROBE_A", "DOTENV_PROBE_B"];
+
+afterEach(() => {
+  for (const key of TEMP_ENV_KEYS) delete process.env[key];
+});
+
+describe("loadDotEnvFile", () => {
+  it("能把 .env 的內容載入 process.env", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "muse-dotenv-"));
+    try {
+      await writeFile(join(dir, ".env"), "DOTENV_PROBE_A=from_file\n", "utf8");
+
+      expect(loadDotEnvFile(join(dir, ".env"))).toBe(true);
+      expect(process.env.DOTENV_PROBE_A).toBe("from_file");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("既有的環境變數優先，不會被 .env 覆寫", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "muse-dotenv-"));
+    try {
+      process.env.DOTENV_PROBE_B = "from_shell";
+      await writeFile(join(dir, ".env"), "DOTENV_PROBE_B=from_file\n", "utf8");
+
+      loadDotEnvFile(join(dir, ".env"));
+
+      expect(process.env.DOTENV_PROBE_B).toBe("from_shell");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("檔案不存在時回傳 false 且不拋錯", () => {
+    expect(loadDotEnvFile(join(tmpdir(), "definitely-not-here", ".env"))).toBe(false);
+  });
+
+  it("PACKAGE_ROOT 指向專案根目錄（該處有 package.json）", async () => {
+    const { access } = await import("node:fs/promises");
+    await expect(access(join(PACKAGE_ROOT, "package.json"))).resolves.toBeUndefined();
+  });
+});
 
 describe("loadConfig", () => {
   it("缺少 MUSE_API_KEY 時拋出 config 類錯誤", () => {
@@ -518,10 +576,35 @@ Expected: FAIL — 找不到模組 `../src/config.js`
 - [ ] **Step 3: 實作 `src/config.ts`**
 
 ```ts
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { MuseError } from "./errors.js";
 
-/** 執行期設定，全部來自環境變數 */
+/**
+ * 套件根目錄。
+ * 編譯後本檔在 <root>/dist/config.js、測試時在 <root>/src/config.ts，兩者上溯一層都得到 <root>。
+ * 不可用 process.cwd()——MCP server 的 cwd 由 client 決定，通常是使用者的專案目錄而非本 server 目錄。
+ */
+export const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * 載入 .env 檔到 process.env。
+ * 使用 Node 內建的 process.loadEnvFile（Node >= 20.12），不引入 dotenv 套件。
+ * 已存在的環境變數不會被覆寫，因此 MCP client 傳入的 env 永遠優先於 .env。
+ * @param envPath .env 檔路徑，預設為套件根目錄下的 .env
+ * @returns 是否成功載入。檔案不存在或格式錯誤時回傳 false 而不拋錯——
+ *          只用 MCP 設定的 env 區塊提供 key 也是合法用法，不該因為沒有 .env 就啟動失敗。
+ */
+export function loadDotEnvFile(envPath: string = resolve(PACKAGE_ROOT, ".env")): boolean {
+  try {
+    process.loadEnvFile(envPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 執行期設定，來源為環境變數（含由 .env 載入者） */
 export interface Config {
   /** Meta Muse API key，唯一來源為 MUSE_API_KEY 環境變數 */
   apiKey: string;
@@ -547,7 +630,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (apiKey === "") {
     throw new MuseError(
       "config",
-      "缺少環境變數 MUSE_API_KEY。請於 MCP server 設定的 env 區塊填入你的 Meta Muse API key（可於 https://dev.meta.ai 後台取得）。"
+      `缺少 MUSE_API_KEY。請擇一設定：(1) 在 ${PACKAGE_ROOT} 底下建立 .env 檔並寫入 MUSE_API_KEY=你的key，` +
+        "或 (2) 在 MCP server 設定的 env 區塊填入。API key 可於 https://dev.meta.ai 後台取得。"
     );
   }
 
@@ -573,13 +657,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 - [ ] **Step 4: 跑測試確認通過**
 
 Run: `npx vitest run tests/config.test.ts`
-Expected: PASS，8 個測試全綠
+Expected: PASS，12 個測試全綠（4 個 `loadDotEnvFile` + 8 個 `loadConfig`）
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/config.ts tests/config.test.ts
-git commit -m "feat: 環境變數設定載入與驗證"
+git add src/config.ts tests/config.test.ts .gitignore
+git commit -m "feat: 環境變數設定載入與 .env 支援"
 ```
 
 ---
@@ -1881,7 +1965,7 @@ Expected: PASS，14 個測試全綠
 #!/usr/bin/env node
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { loadConfig } from "./config.js";
+import { loadConfig, loadDotEnvFile } from "./config.js";
 import { MuseError } from "./errors.js";
 import { saveImages, toImageUrl } from "./image-store.js";
 import { MuseClient } from "./muse-client.js";
@@ -1892,6 +1976,8 @@ import { createTools } from "./tools.js";
  * 注意：stdout 是 JSON-RPC 通道，所有日誌一律走 stderr。
  */
 async function main(): Promise<void> {
+  // 先載入套件根目錄的 .env；已存在的環境變數優先，故 MCP 設定的 env 不會被蓋掉
+  const dotEnvLoaded = loadDotEnvFile();
   const config = loadConfig();
   const client = new MuseClient(config);
   const tools = createTools({ client, config, saveImages, toImageUrl });
@@ -1903,7 +1989,10 @@ async function main(): Promise<void> {
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error(`muse-image MCP server 已啟動（輸出目錄：${config.outputDir}）`);
+  console.error(
+    `muse-image MCP server 已啟動（輸出目錄：${config.outputDir}；` +
+      `.env：${dotEnvLoaded ? "已載入" : "未使用"}）`
+  );
 }
 
 main().catch((error: unknown) => {
@@ -1922,13 +2011,23 @@ main().catch((error: unknown) => {
 Run: `npm run build`
 Expected: 無錯誤
 
-Run（PowerShell，刻意不給 key）：
+⚠️ 專案根目錄的 `.env` 已含真實 key，若不處理它，這個「缺 key」情境根本觸發不了。必須先暫時移開 `.env`，驗證完**務必移回**：
+
+Run（PowerShell）：
 
 ```powershell
-$env:MUSE_API_KEY = ""; node dist/index.js
+Rename-Item .env .env.bak
+try {
+  $env:MUSE_API_KEY = ""
+  node dist/index.js
+  "exit code = $LASTEXITCODE"
+} finally {
+  Rename-Item .env.bak .env
+  Remove-Item Env:\MUSE_API_KEY -ErrorAction SilentlyContinue
+}
 ```
 
-Expected: 立刻結束，stderr 印出含 `MUSE_API_KEY` 的中文設定說明，exit code 為 1
+Expected: 立刻結束，stderr 印出含 `MUSE_API_KEY` 與 `.env` 建議的中文設定說明，exit code 為 1。最後確認 `.env` 已還原（`Test-Path .env` 為 `True`）。
 
 - [ ] **Step 7: 驗證有 key 時能完成 MCP 握手**
 
@@ -1973,7 +2072,7 @@ git commit -m "feat: 三個 MCP 工具與 stdio 進入點"
 
 ```ts
 import { describe, it, expect } from "vitest";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, loadDotEnvFile } from "../src/config.js";
 import { MuseClient, extractB64Images } from "../src/muse-client.js";
 import { saveImages } from "../src/image-store.js";
 
@@ -1982,6 +2081,9 @@ import { saveImages } from "../src/image-store.js";
  * 需要 MUSE_E2E=1 與真實的 MUSE_API_KEY 才會執行，每次約花費 US$0.03。
  * 由獨立的 vitest.e2e.config.ts 載入，預設的 `npm test` 不會跑到。
  */
+// key 放在專案根目錄的 .env，測試也要走同一條載入路徑
+loadDotEnvFile();
+
 const enabled = process.env.MUSE_E2E === "1";
 
 describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
@@ -2099,7 +2201,7 @@ Expected: 3 個測試通過，`muse-output/` 下出現 `smoke-generate-*.png`、
 
 ## 需求
 
-- Node.js >= 20
+- Node.js >= 20.12.0
 - 一組 Meta Muse API key（於 <https://dev.meta.ai> 後台取得）
 
 ## 安裝
@@ -2109,18 +2211,41 @@ npm install
 npm run build
 ```
 
-## 設定到 Claude Code
+## 設定 API key
+
+有兩種方式，**優先序為 MCP 設定的 `env` > `.env` 檔**：
+
+### 方式一：`.env` 檔（推薦）
+
+在**本專案根目錄**建立 `.env`（可複製 `.env.example`）：
+
+```
+MUSE_API_KEY=你的key
+```
+
+注意 `.env` 是從**套件根目錄**讀取，不是從你執行 Claude Code 的專案目錄——因為 MCP server 的工作目錄由 client 決定，不可靠。`.env` 已列在 `.gitignore`，不會被提交。
+
+### 方式二：MCP 設定的 env 區塊
 
 ```bash
 claude mcp add muse-image node D:\GitHub\muse-image-mcp\dist\index.js \
   --scope user \
-  --env MUSE_API_KEY=你的key \
-  --env MUSE_OUTPUT_DIR=D:\muse-output
+  --env MUSE_API_KEY=你的key
+```
+
+## 設定到 Claude Code
+
+用了 `.env` 的話，註冊時就不必再帶 key：
+
+```bash
+claude mcp add muse-image node D:\GitHub\muse-image-mcp\dist\index.js --scope user
 ```
 
 裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
 
 ### 環境變數
+
+以下變數都可寫在 `.env` 或 MCP 設定的 `env` 區塊。
 
 | 變數 | 必填 | 預設 | 說明 |
 |---|---|---|---|
@@ -2215,6 +2340,7 @@ git commit -m "feat: 煙霧測試與使用說明文件"
 | §5.1–5.3 三個工具的參數表 | Task 5 的 schema | 涵蓋 |
 | §5.4 共同回傳格式 | Task 5 `formatResult` + 測試 | 涵蓋 |
 | §6 四個環境變數與 fail fast | Task 2 + Task 5 Step 6 | 涵蓋 |
+| §6.1 `.env` 支援與來源優先序 | Task 2 `loadDotEnvFile` + Task 5 `index.ts` + Task 6 README | 涵蓋 |
 | §7 錯誤處理對照表（9 種分類） | Task 1 `errors.ts` + Task 3 retry + Task 4 io/input + Task 5 `toErrorResult` | 涵蓋 |
 | §8 測試策略 | Task 1–6 各自的測試 | 涵蓋 |
 | §10 完成定義 | Task 6 Step 6 | 涵蓋 |

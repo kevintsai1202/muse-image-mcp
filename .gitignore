@@ -1,0 +1,5 @@
+node_modules/
+dist/
+muse-output/
+.env
+*.log

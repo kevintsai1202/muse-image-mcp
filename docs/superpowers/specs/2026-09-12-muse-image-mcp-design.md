@@ -223,9 +223,27 @@ response_id: resp_xxxxx（下一輪修改請帶入 previous_response_id）
 | `MUSE_BASE_URL` | 否 | `https://api.meta.ai/v1` | 可指向 mock server 供測試 |
 | `MUSE_TIMEOUT_MS` | 否 | `120000` | 單次請求逾時（生圖較慢，預設 2 分鐘） |
 
-**啟動期行為**：缺少 `MUSE_API_KEY` 時，在 stderr 印出明確的設定教學後 `process.exit(1)`。MCP server 最難查的故障就是靜默失敗，必須大聲失敗。
+### 6.1 `.env` 檔支援（2026-09-12 追加）
 
-**安全**：key 只從環境變數讀取，不寫入程式碼、不寫入 git、不寫入對話紀錄。`.gitignore` 排除 `muse-output/`、`.env`、`node_modules/`、`dist/`。README 提供 `claude mcp add` 設定範本，key 由開發者自行填入。
+開發者要求把 `MUSE_API_KEY` 放在專案根目錄的 `.env`，而非只靠 MCP 設定的 `env` 區塊。
+
+**實作方式**：使用 Node 內建的 `process.loadEnvFile()`，**不引入 dotenv 套件**。已於 Node v24.15.0 實測確認三項行為：
+
+| 行為 | 實測結果 | 設計採用 |
+|---|---|---|
+| API 可用性 | `typeof process.loadEnvFile === "function"` | 直接使用，零依賴 |
+| 與既有環境變數的優先序 | **既有的環境變數勝出**，不會被 `.env` 覆寫 | 正是所需的優先序：MCP 設定的 `env` > `.env` 檔 |
+| 檔案不存在 | 拋出 `ENOENT` | 必須 try/catch 吞掉，因為只用 MCP `env` 設定 key 也是合法用法 |
+
+**`.env` 的位置**：解析為**套件根目錄**（相對於 `import.meta.url` 上溯一層），**不是** `process.cwd()`。理由：MCP server 的 cwd 由 client 決定，通常是使用者當下的專案目錄而非本 server 的目錄，用 cwd 會找不到檔案。編譯後檔案在 `<root>/dist/config.js`、測試時在 `<root>/src/config.ts`，兩者上溯一層都得到 `<root>`。
+
+**Node 版本下限因此提高到 `>=20.12.0`**（`process.loadEnvFile` 的導入版本）。
+
+**設定來源優先序**：MCP client 傳入的 `env` > 套件根目錄的 `.env` > 程式內建預設值。
+
+**啟動期行為**：先嘗試載入 `.env`（失敗則靜默略過），再讀取環境變數。缺少 `MUSE_API_KEY` 時，在 stderr 印出明確的設定教學後 `process.exit(1)`。MCP server 最難查的故障就是靜默失敗，必須大聲失敗。
+
+**安全**：key 只從環境變數或 `.env` 讀取，不寫入程式碼、不寫入 git、不寫入對話紀錄。`.gitignore` 必須在 `.env` 出現之前就排除 `muse-output/`、`.env`、`node_modules/`、`dist/`。README 提供 `claude mcp add` 設定範本與 `.env` 用法，key 由開發者自行填入。
 
 ---
 
@@ -252,7 +270,7 @@ response_id: resp_xxxxx（下一輪修改請帶入 previous_response_id）
 
 | 測試對象 | 方式 | 覆蓋重點 |
 |---|---|---|
-| `config` | 直接呼叫 | 缺 `MUSE_API_KEY` 拋明確錯誤；各預設值正確；`MUSE_BASE_URL` 可覆寫 |
+| `config` | 直接呼叫 + 暫存 `.env` 檔 | 缺 `MUSE_API_KEY` 拋明確錯誤；各預設值正確；`MUSE_BASE_URL` 可覆寫；`.env` 能被載入；`.env` 不存在時不拋錯；既有環境變數優先於 `.env` |
 | `errors` | 直接呼叫 | 各 HTTP 狀態碼 → 正確分類與 `retryable` 旗標；400 的 `error.message` 原文保留 |
 | `muse-client` | mock `globalThis.fetch` | 三端點 request body 組裝正確（含選填參數的省略行為）；401 不重試；429 重試 3 次後拋錯；逾時觸發 abort |
 | `image-store` | 暫存目錄 | base64 正確解碼落地；副檔名對應 `output_format`；檔名含時間戳與序號；目錄自動建立；`filename_prefix` 的不安全字元被清理；本機路徑轉 data URL 正確、不存在時拋 `input` 類錯誤 |

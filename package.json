@@ -1,6 +1,7 @@
 {
   "name": "muse-image-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
+  "mcpName": "io.github.kevintsai1202/muse-image",
   "description": "MCP server for Meta Muse image generation",
   "type": "module",
   "license": "MIT",

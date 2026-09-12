@@ -57,10 +57,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
+  // 空字串或全空白視同未設定，才落回預設值——MCP JSON 設定常見把變數留空當佔位符，
+  // 若在此當成「使用者刻意指定空字串」，baseUrl 會變成 "" 導致組出的 URL 缺少主機部分。
   // 結尾斜線會讓後續 `${baseUrl}/images/generations` 變成雙斜線，先移除
-  const baseUrl = (env.MUSE_BASE_URL ?? DEFAULT_BASE_URL).trim().replace(/\/+$/, "");
+  const rawBaseUrl = (env.MUSE_BASE_URL ?? "").trim();
+  const baseUrl = (rawBaseUrl === "" ? DEFAULT_BASE_URL : rawBaseUrl).replace(/\/+$/, "");
 
-  const outputDir = resolve(process.cwd(), (env.MUSE_OUTPUT_DIR ?? DEFAULT_OUTPUT_DIR).trim());
+  // 同理，空字串或全空白視同未設定 MUSE_OUTPUT_DIR，否則 resolve(cwd, "") 會解析成 cwd 本身，
+  // 圖片就會落在使用者專案根目錄而非 muse-output/ 子目錄
+  const rawOutputDir = (env.MUSE_OUTPUT_DIR ?? "").trim();
+  const outputDir = resolve(process.cwd(), rawOutputDir === "" ? DEFAULT_OUTPUT_DIR : rawOutputDir);
 
   const rawTimeout = (env.MUSE_TIMEOUT_MS ?? "").trim();
   let timeoutMs = DEFAULT_TIMEOUT_MS;

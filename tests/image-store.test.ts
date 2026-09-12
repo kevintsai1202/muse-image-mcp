@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtemp, rm, readFile, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, isAbsolute } from "node:path";
@@ -98,6 +98,39 @@ describe("saveImages", () => {
 
   it("空陣列回傳空陣列且不建立目錄以外的檔案", async () => {
     expect(await saveImages([], { outputDir: workDir, prefix: "t", format: "png" })).toEqual([]);
+  });
+
+  it("批次中途寫入失敗時，錯誤訊息包含已成功寫入的檔案路徑（Fix 2）", async () => {
+    // 用假時鐘固定 saveImages 內部 `new Date()` 的取值，讓我們能用 buildFilename
+    // 事先算出第三張圖片的確切檔名，藉此在該路徑「真實」製造寫入失敗，不需 mock node:fs
+    const fixedNow = new Date(2026, 8, 12, 10, 0, 0);
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
+    try {
+      const b64 = Buffer.from("x", "utf8").toString("base64");
+      const firstPath = join(workDir, buildFilename("t", 1, "png", fixedNow));
+      const secondPath = join(workDir, buildFilename("t", 2, "png", fixedNow));
+      const thirdPath = join(workDir, buildFilename("t", 3, "png", fixedNow));
+
+      // 在第三個檔案的確切路徑預先建立一個目錄，writeFile 對它寫入時會因 EISDIR 失敗
+      await mkdir(thirdPath, { recursive: true });
+
+      let caught: MuseError | undefined;
+      await saveImages([b64, b64, b64], { outputDir: workDir, prefix: "t", format: "png" }).catch(err => {
+        caught = err as MuseError;
+      });
+
+      expect(caught).toBeInstanceOf(MuseError);
+      expect(caught!.kind).toBe("io");
+      expect(caught!.message).toContain(firstPath);
+      expect(caught!.message).toContain(secondPath);
+
+      // 前兩張圖片必須是真的已經寫入磁碟，不只是錯誤訊息聲稱寫入
+      expect(await readFile(firstPath, "utf8")).toBe("x");
+      expect(await readFile(secondPath, "utf8")).toBe("x");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

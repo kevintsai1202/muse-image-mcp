@@ -31,18 +31,22 @@ MUSE_API_KEY=你的key
 ### 方式二：MCP 設定的 env 區塊
 
 ```bash
-claude mcp add muse-image node D:\GitHub\muse-image-mcp\dist\index.js \
+claude mcp add muse-image node <你的專案路徑>\dist\index.js \
   --scope user \
   --env MUSE_API_KEY=你的key
 ```
+
+> 將 `<你的專案路徑>` 換成你實際 clone 這個專案的位置（例如 `D:\GitHub\muse-image-mcp`）。
 
 ## 設定到 Claude Code
 
 用了 `.env` 的話，註冊時就不必再帶 key：
 
 ```bash
-claude mcp add muse-image node D:\GitHub\muse-image-mcp\dist\index.js --scope user
+claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
 ```
+
+同樣把 `<你的專案路徑>` 換成實際 clone 位置。
 
 裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
 
@@ -56,6 +60,8 @@ claude mcp add muse-image node D:\GitHub\muse-image-mcp\dist\index.js --scope us
 | `MUSE_OUTPUT_DIR` | 否 | `<cwd>/muse-output` | 圖片輸出目錄，不存在時自動建立 |
 | `MUSE_BASE_URL` | 否 | `https://api.meta.ai/v1` | API base URL |
 | `MUSE_TIMEOUT_MS` | 否 | `120000` | 單次請求逾時毫秒數 |
+
+> `MUSE_OUTPUT_DIR` 的預設值 `<cwd>/muse-output` 所指的 `cwd`，是 **MCP client 啟動這個 server 時所在的工作目錄**——如同上方 `.env` 一節所說，這個目錄由 client 決定、不可靠，多半不是本專案目錄。也就是說圖片實際會落在「啟動 server 當下 client 的工作目錄」下的 `muse-output/`。如果想要固定的輸出位置，請明確設定 `MUSE_OUTPUT_DIR` 為絕對路徑。
 
 ## 工具
 
@@ -131,5 +137,5 @@ Meta 未公開 `/v1/responses` 的回應 schema，Task 3 實作時是比照 Open
 ```bash
 npm test          # 單元測試（不會打真實 API）
 npm run build     # 編譯到 dist/
-npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，約花費 US$0.03
+npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，共產生 4 張圖，約花費 US$0.04
 ```

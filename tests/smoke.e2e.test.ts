@@ -5,7 +5,8 @@ import { saveImages } from "../src/image-store.js";
 
 /**
  * 真實 API 煙霧測試。
- * 需要 MUSE_E2E=1 與真實的 MUSE_API_KEY 才會執行，每次約花費 US$0.03。
+ * 需要 MUSE_E2E=1 與真實的 MUSE_API_KEY 才會執行，每次共產生 4 張圖（generate 1 張、
+ * edit 先 generate 1 張再 edit 1 張、iterate 1 張），約花費 US$0.04。
  * 由獨立的 vitest.e2e.config.ts 載入，預設的 `npm test` 不會跑到。
  */
 // key 放在專案根目錄的 .env，測試也要走同一條載入路徑

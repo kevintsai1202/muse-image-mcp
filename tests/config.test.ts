@@ -78,9 +78,29 @@ describe("loadConfig", () => {
     expect(config.baseUrl).toBe("http://localhost:9999/v1");
   });
 
+  it("MUSE_BASE_URL 為空字串時視同未設定，使用預設值", () => {
+    const config = loadConfig({ MUSE_API_KEY: "k", MUSE_BASE_URL: "" });
+    expect(config.baseUrl).toBe("https://api.meta.ai/v1");
+  });
+
+  it("MUSE_BASE_URL 為全空白字串時視同未設定，使用預設值", () => {
+    const config = loadConfig({ MUSE_API_KEY: "k", MUSE_BASE_URL: "   " });
+    expect(config.baseUrl).toBe("https://api.meta.ai/v1");
+  });
+
   it("輸出目錄一律轉為絕對路徑", () => {
     const config = loadConfig({ MUSE_API_KEY: "k", MUSE_OUTPUT_DIR: "out/images" });
     expect(config.outputDir).toBe(resolve(process.cwd(), "out/images"));
+  });
+
+  it("MUSE_OUTPUT_DIR 為空字串時視同未設定，使用預設值 muse-output", () => {
+    const config = loadConfig({ MUSE_API_KEY: "k", MUSE_OUTPUT_DIR: "" });
+    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
+  });
+
+  it("MUSE_OUTPUT_DIR 為全空白字串時視同未設定，使用預設值 muse-output", () => {
+    const config = loadConfig({ MUSE_API_KEY: "k", MUSE_OUTPUT_DIR: "   " });
+    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
   });
 
   it("逾時可覆寫", () => {

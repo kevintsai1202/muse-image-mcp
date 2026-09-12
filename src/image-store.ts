@@ -40,6 +40,7 @@ export function sanitizePrefix(prefix: string): string {
 /**
  * 組出輸出檔名：`<prefix>-<yyyyMMdd-HHmmss>-<序號>.<副檔名>`
  * @param index 從 1 起算的序號
+ * @param format 輸出格式，決定副檔名（jpeg 對應 .jpg）
  * @param now 時間來源，測試時可注入固定時間
  */
 export function buildFilename(prefix: string, index: number, format: OutputFormat, now: Date = new Date()): string {
@@ -77,9 +78,12 @@ export async function saveImages(
     try {
       await writeFile(fullPath, Buffer.from(b64, "base64"));
     } catch (cause) {
+      // 生成結果已經付費：批次中途失敗時，必須把已成功寫入的路徑一併回報給呼叫端，
+      // 否則使用者只看到失敗訊息，卻找不到已經落地、已經付了錢的前幾張圖片
       throw new MuseError(
         "io",
-        `寫入圖片失敗 ${fullPath}：${(cause as Error).message}。已生成的圖片可能因此遺失，請檢查目錄權限後重試。`,
+        `寫入圖片失敗 ${fullPath}：${(cause as Error).message}。` +
+          `本批已成功寫入 ${paths.length} 個檔案：${paths.join("、") || "（無）"}。請檢查目錄權限後重試。`,
         { cause }
       );
     }

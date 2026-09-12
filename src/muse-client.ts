@@ -138,7 +138,7 @@ export class MuseClient {
     if (images.length === 0) {
       throw new MuseError(
         "server",
-        `Muse /responses 回應中找不到任何圖片資料（b64_json）。原始回應：${JSON.stringify(raw).slice(0, 500)}`
+        `Muse /responses 回應中找不到任何圖片資料（b64_json 或 image_generation_call.result）。原始回應：${JSON.stringify(raw).slice(0, 500)}`
       );
     }
 

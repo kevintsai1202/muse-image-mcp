@@ -36,6 +36,13 @@ describe("sanitizePrefix", () => {
   it("長度上限 40 字元", () => {
     expect(sanitizePrefix("x".repeat(100))).toHaveLength(40);
   });
+
+  it("裁切點恰好落在連字號上時，不得殘留結尾連字號", () => {
+    // 第 40 個字元（index 39）是連字號：若先裁切再去頭尾，會裁出一個從未被處理過的結尾連字號
+    const result = sanitizePrefix("a".repeat(39) + "-" + "b".repeat(10));
+    expect(result.length).toBeLessThanOrEqual(40);
+    expect(result.endsWith("-")).toBe(false);
+  });
 });
 
 describe("buildFilename", () => {

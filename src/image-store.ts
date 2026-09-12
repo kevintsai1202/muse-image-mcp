@@ -25,13 +25,15 @@ const MAX_PREFIX_LENGTH = 40;
 /**
  * 把使用者給的前綴清理成安全檔名片段。
  * 任何非 [A-Za-z0-9_-] 的字元都換成連字號，避免路徑穿越與跨平台檔名問題。
+ * 長度上限必須在「去除頭尾連字號」之前套用：若先裁切再去頭尾，恰好落在裁切邊界上的
+ * 連字號會被裁出一個從未被收斂或去除過的全新結尾連字號，違反本函式頭尾不留連字號的約定。
  */
 export function sanitizePrefix(prefix: string): string {
   const cleaned = prefix
     .replace(/[^A-Za-z0-9_-]+/g, "-")
     .replace(/-{2,}/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, MAX_PREFIX_LENGTH);
+    .slice(0, MAX_PREFIX_LENGTH)
+    .replace(/^-+|-+$/g, "");
   return cleaned === "" ? "muse" : cleaned;
 }
 

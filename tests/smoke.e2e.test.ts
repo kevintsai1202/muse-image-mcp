@@ -20,16 +20,16 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
     const config = loadConfig();
     const client = new MuseClient(config);
 
-    const response = await client.generate({
+    const { result: genResult } = await client.generate({
       prompt: "a simple flat-style icon of a blue cube on white background",
       n: 1,
       outputFormat: "png"
     });
 
-    expect(response.data.length).toBe(1);
-    expect(response.data[0]!.b64_json.length).toBeGreaterThan(1000);
+    expect(genResult.data.length).toBe(1);
+    expect(genResult.data[0]!.b64_json.length).toBeGreaterThan(1000);
 
-    const paths = await saveImages([response.data[0]!.b64_json], {
+    const paths = await saveImages([genResult.data[0]!.b64_json], {
       outputDir: config.outputDir,
       prefix: "smoke-generate",
       format: "png"
@@ -41,22 +41,22 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
     const config = loadConfig();
     const client = new MuseClient(config);
 
-    const base = await client.generate({
+    const { result: baseResult } = await client.generate({
       prompt: "a simple flat-style icon of a blue cube on white background",
       n: 1,
       outputFormat: "png"
     });
-    const dataUrl = `data:image/png;base64,${base.data[0]!.b64_json}`;
+    const dataUrl = `data:image/png;base64,${baseResult.data[0]!.b64_json}`;
 
-    const edited = await client.edit({
+    const { result: editResult } = await client.edit({
       prompt: "change the cube color to red",
       imageUrls: [dataUrl],
       n: 1,
       outputFormat: "png"
     });
 
-    expect(edited.data.length).toBe(1);
-    const paths = await saveImages([edited.data[0]!.b64_json], {
+    expect(editResult.data.length).toBe(1);
+    const paths = await saveImages([editResult.data[0]!.b64_json], {
       outputDir: config.outputDir,
       prefix: "smoke-edit",
       format: "png"
@@ -68,21 +68,21 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
     const config = loadConfig();
     const client = new MuseClient(config);
 
-    const result = await client.iterate({
+    const { result: iterateResult } = await client.iterate({
       prompt: "a simple flat-style icon of a green triangle on white background"
     });
 
     // 這三個斷言就是 spec §1「待實測確認」項目的驗證點
-    expect(result.responseId).not.toBe("");
-    expect(result.images.length).toBeGreaterThan(0);
-    expect(result.images[0]!.length).toBeGreaterThan(1000);
+    expect(iterateResult.responseId).not.toBe("");
+    expect(iterateResult.images.length).toBeGreaterThan(0);
+    expect(iterateResult.images[0]!.length).toBeGreaterThan(1000);
 
-    const paths = await saveImages(result.images, {
+    const paths = await saveImages(iterateResult.images, {
       outputDir: config.outputDir,
       prefix: "smoke-iterate",
-      format: result.outputFormat
+      format: iterateResult.outputFormat
     });
-    console.error(`[smoke] 迭代輸出：${paths.join(", ")}；response_id=${result.responseId}`);
+    console.error(`[smoke] 迭代輸出：${paths.join(", ")}；response_id=${iterateResult.responseId}`);
   });
 
   it("iterate_image 兩輪對話：第二輪不應重複回傳第一輪的圖片（Task 7）", async () => {
@@ -90,7 +90,7 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
     const client = new MuseClient(config);
 
     // 第一輪：開新對話
-    const turn1 = await client.iterate({
+    const { result: turn1 } = await client.iterate({
       prompt: "a simple flat-style icon of a purple star on white background"
     });
     expect(turn1.responseId).not.toBe("");
@@ -98,7 +98,7 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
 
     // 第二輪：帶入 previous_response_id 續接對話，驗證是否只回傳「這一輪」新生成的圖片，
     // 而不是把第一輪的 image_generation_call 也一併撈出來（extractB64Images 是無去重的深度走訪）
-    const turn2 = await client.iterate({
+    const { result: turn2 } = await client.iterate({
       prompt: "now make the star yellow",
       previousResponseId: turn1.responseId
     });

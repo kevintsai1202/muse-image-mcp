@@ -7,12 +7,15 @@ const CONFIG: Config = Object.freeze({
   apiKey: "test-key",
   baseUrl: "https://api.example.test/v1",
   outputDir: "/tmp/out",
-  timeoutMs: 1000
+  timeoutMs: 1000,
+  model: "muse-image-1.0",
+  extraParams: {}
 });
 
-/** 建立一個回傳指定 JSON 與狀態碼的 fetch 假物件 */
+/** 建立一個回傳指定 JSON 與狀態碼的 fetch 假物件。
+ *  參數需明確宣告型別，否則 mock.calls 會被推斷成零長度 tuple，取 calls[0]![1] 會編譯失敗。 */
 function fakeFetch(status: number, body: unknown) {
-  return vi.fn(async () =>
+  return vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
     new Response(typeof body === "string" ? body : JSON.stringify(body), {
       status,
       headers: { "content-type": "application/json" }
@@ -82,9 +85,77 @@ describe("MuseClient.generate", () => {
       fetchImpl: fakeFetch(200, OK_IMAGE_BODY) as unknown as typeof fetch,
       sleep: noSleep
     });
-    const result = await client.generate({ prompt: "x" });
+    const { result } = await client.generate({ prompt: "x" });
     expect(result.data[0]!.b64_json).toBe("AAAA");
     expect(result.usage!.total_tokens).toBe(15);
+  });
+
+  it("可用 params.model 覆寫 config 的預設模型", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.generate({ prompt: "p", model: "muse-image-9.9" });
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string).model).toBe("muse-image-9.9");
+  });
+
+  it("未給 params.model 時採用 config.model", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const config: Config = Object.freeze({ ...CONFIG, model: "muse-image-from-config" });
+    const client = new MuseClient(config, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.generate({ prompt: "p" });
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string).model).toBe("muse-image-from-config");
+  });
+
+  it("config.extraParams 會併入 body", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const config: Config = Object.freeze({ ...CONFIG, extraParams: { quality: "ultra" } });
+    const client = new MuseClient(config, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.generate({ prompt: "p" });
+
+    const [, init] = fetchImpl.mock.calls[0]!;
+    expect(JSON.parse((init as RequestInit).body as string).quality).toBe("ultra");
+  });
+
+  it("params.extraParams 覆寫 config.extraParams", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const config: Config = Object.freeze({ ...CONFIG, extraParams: { quality: "ultra" } });
+    const client = new MuseClient(config, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.generate({ prompt: "p", extraParams: { quality: "draft", seed: 7 } });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.quality).toBe("draft");
+    expect(body.seed).toBe(7);
+  });
+
+  it("extraParams 不得覆寫 prompt 與 model，並以 blockedKeys 回報", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    const { blockedKeys } = await client.generate({
+      prompt: "real",
+      extraParams: { prompt: "fake", model: "hijack" }
+    });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.prompt).toBe("real");
+    expect(body.model).toBe("muse-image-1.0");
+    expect(blockedKeys.sort()).toEqual(["model", "prompt"]);
+  });
+
+  it("回傳值以 result 攜帶 API 回應", async () => {
+    const fetchImpl = fakeFetch(200, OK_IMAGE_BODY);
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    const { result } = await client.generate({ prompt: "p" });
+
+    expect(result.data[0]!.b64_json).toBe("AAAA");
   });
 });
 
@@ -159,7 +230,7 @@ describe("MuseClient.iterate", () => {
       sleep: noSleep
     });
 
-    const result = await client.iterate({ prompt: "x" });
+    const { result } = await client.iterate({ prompt: "x" });
     expect(result.responseId).toBe("resp_9");
     expect(result.images).toEqual(["DEEP"]);
     expect(result.usage!.total_tokens).toBe(3);
@@ -213,7 +284,7 @@ describe("MuseClient.iterate", () => {
       sleep: noSleep
     });
 
-    const result = await client.iterate({ prompt: "a simple flat-style icon of a green triangle" });
+    const { result } = await client.iterate({ prompt: "a simple flat-style icon of a green triangle" });
     expect(result.responseId).toBe("resp_6aa4c23f99592ae0ac454928");
     expect(result.images).toEqual(["UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="]);
     expect(result.outputFormat).toBe("webp");
@@ -236,7 +307,7 @@ describe("MuseClient.iterate", () => {
     const fetchImpl = fakeFetch(200, REAL_RESPONSES_SHAPE);
     const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
 
-    const result = await client.iterate({
+    const { result } = await client.iterate({
       prompt: "now make the star yellow",
       previousResponseId: "resp_turn1_placeholder"
     });
@@ -248,6 +319,22 @@ describe("MuseClient.iterate", () => {
     // 確認回應面：即使是續接對話，仍只取出當輪 1 張圖片，不會重複帶出歷史圖片
     expect(result.images).toHaveLength(1);
     expect(result.images).toEqual(["UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="]);
+  });
+
+  it("extraParams 不得覆寫 store 與 input 等核心欄位", async () => {
+    const fetchImpl = fakeFetch(200, { id: "resp_1", output: [{ type: "image_generation_call", result: "ZZZZ" }] });
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    const { blockedKeys } = await client.iterate({
+      prompt: "p",
+      extraParams: { store: false, input: "hijack", quality: "ultra" }
+    });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.store).toBe(true);
+    expect(body.input).toBe("p");
+    expect(body.quality).toBe("ultra");
+    expect(blockedKeys.sort()).toEqual(["input", "store"]);
   });
 });
 
@@ -270,7 +357,7 @@ describe("重試行為", () => {
 
   it("429 重試 3 次後放棄，共發出 4 次請求", async () => {
     const fetchImpl = fakeFetch(429, { error: { message: "slow down" } });
-    const sleep = vi.fn(async () => {});
+    const sleep = vi.fn(async (_ms: number) => {});
     const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep });
 
     await expect(client.generate({ prompt: "x" })).rejects.toMatchObject({ kind: "rate_limit" });
@@ -285,7 +372,7 @@ describe("重試行為", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify(OK_IMAGE_BODY), { status: 200 }));
     const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
 
-    const result = await client.generate({ prompt: "x" });
+    const { result } = await client.generate({ prompt: "x" });
     expect(result.data[0]!.b64_json).toBe("AAAA");
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });

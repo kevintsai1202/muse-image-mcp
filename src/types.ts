@@ -20,7 +20,7 @@ export interface MuseImageResponse {
 }
 
 /** 文字生圖參數（已由工具層正規化，欄位為 camelCase） */
-export interface GenerateParams {
+export interface GenerateParams extends ModelOverrides {
   prompt: string;
   n?: number;
   /** 長寬比字串如 "1792x1024"，非精確像素 */
@@ -35,7 +35,7 @@ export interface EditParams extends GenerateParams {
 }
 
 /** 對話式迭代參數 */
-export interface IterateParams {
+export interface IterateParams extends ModelOverrides {
   prompt: string;
   /** 上一輪回傳的 response id；省略代表開新對話 */
   previousResponseId?: string;
@@ -50,4 +50,24 @@ export interface IterateResult {
   images: string[];
   outputFormat: OutputFormat;
   usage?: MuseUsage;
+}
+
+/** 三個工具共用的模型與擴充參數覆寫 */
+export interface ModelOverrides {
+  /** 模型 ID，省略則採用 config.model */
+  model?: string;
+  /** 單次呼叫的額外參數，與 config.extraParams 合併後套用 */
+  extraParams?: Record<string, unknown>;
+}
+
+/**
+ * client 方法的回傳包裝。
+ * blockedKeys 是本地產生的資訊，不塞進 MuseImageResponse——後者是 API 回應的忠實對應，
+ * 混入本地欄位會讓它不再能代表 API 契約。
+ */
+export interface ClientResult<T> {
+  /** API 回應或其解析結果 */
+  result: T;
+  /** 因撞到核心欄位而被忽略的擴充參數 key */
+  blockedKeys: string[];
 }

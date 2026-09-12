@@ -13,7 +13,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
 
 <style>
 /* ============================================================
@@ -137,7 +137,10 @@ h2{
   font-size:.95rem; font-weight:500; color:var(--cyan);
   margin:0 0 8px;
 }
-.tool .when{
+/* 刻意用單一 class 而非 .tool .when：任何設了 display 的選擇器只要特異性高過
+   語系規則的 [data-lang="…"]（0,1,0），就會把該語系的隱藏蓋掉，兩種語言同時出現。
+   維持 0,1,0 讓後定義的語系規則能勝出。新增樣式時請留意同樣的陷阱。 */
+.when{
   display:block; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase;
   color:var(--amber); margin-bottom:6px;
 }
@@ -301,9 +304,81 @@ code{
   background:var(--surface-2); border:1px solid var(--line);
   border-radius:5px; padding:1px 5px; color:var(--text);
 }
+
+/* ---------- 語系切換 ----------
+   英文為預設，所以中文在 CSS 層預設就隱藏；head 裡有一小段 inline script
+   在渲染前就決定 data-ui-lang，避免偏好中文的讀者先看到一閃的英文。
+   display:revert 讓元素回到自己原本的 display（span 是 inline、p 是 block），
+   不必為每種標籤各寫一條規則。 */
+[data-lang="zh"]{ display:none; }
+html[data-ui-lang="zh"] [data-lang="zh"]{ display:revert; }
+html[data-ui-lang="zh"] [data-lang="en"]{ display:none; }
+
+.lang-switch{
+  position:fixed; top:14px; right:14px; z-index:50;
+  display:flex; gap:2px; padding:3px;
+  background:rgba(8,9,11,.82);
+  -webkit-backdrop-filter:blur(8px); backdrop-filter:blur(8px);
+  border:1px solid var(--line); border-radius:999px;
+}
+.lang-switch button{
+  font-family:'IBM Plex Sans','Noto Sans TC',sans-serif;
+  font-size:.76rem; font-weight:600; line-height:1.4;
+  padding:5px 13px; border:0; border-radius:999px;
+  background:transparent; color:var(--muted); cursor:pointer;
+  transition:background .15s ease, color .15s ease;
+}
+.lang-switch button:hover{ color:var(--text); }
+.lang-switch button[aria-pressed="true"]{ background:var(--cyan); color:#04252E; }
+
+/* 中文沒有 Instrument Serif 可用，標題改用思源黑體的粗體撐場面，
+   避免瀏覽器退回預設襯線體讓版面走調 */
+html[data-ui-lang="zh"] h1,
+html[data-ui-lang="zh"] h2{
+  font-family:'Noto Sans TC','IBM Plex Sans',sans-serif;
+  font-weight:700; letter-spacing:.01em;
+}
+html[data-ui-lang="zh"] .price-num{
+  font-family:'Instrument Serif',Georgia,serif;
+}
+/* 中文沒有真正的斜體字面，瀏覽器只能把字強行傾斜，讀起來像壞掉。
+   強調改為只靠顏色；nowrap 讓被強調的詞不會被拆到兩行。 */
+html[data-ui-lang="zh"] .hero h1 em{
+  font-style:normal; white-space:nowrap;
+}
+
+/* 複製按鈕的回饋文字由 CSS 出字，JS 只切 class。
+   必須定義在上面的語系規則之後：兩者特異性相同，靠順序決勝負。 */
+.copy.is-done > span,
+.copy.is-fallback > span{ display:none; }
+.copy.is-done{ color:var(--cyan); border-color:var(--cyan); }
+.copy.is-done::after{ content:"Copied"; }
+.copy.is-fallback::after{ content:"Press Ctrl+C"; }
+html[data-ui-lang="zh"] .copy.is-done::after{ content:"已複製"; }
+html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
 </style>
+
+<script>
+// 在首次繪製前就定好語系，否則偏好中文的讀者會先看到一閃而過的英文。
+// 順序：使用者曾選過的 > 瀏覽器語言 > 英文。localStorage 在無痕或封鎖時會丟例外，故包 try。
+(function () {
+  var lang = 'en';
+  try {
+    var saved = localStorage.getItem('muse-lang');
+    lang = saved || (/^zh\b/i.test(navigator.language || '') ? 'zh' : 'en');
+  } catch (e) { /* 讀不到就用預設的英文 */ }
+  var root = document.documentElement;
+  root.setAttribute('data-ui-lang', lang);
+  root.lang = lang === 'zh' ? 'zh-Hant' : 'en';
+})();
+</script>
 </head>
 <body>
+
+<div class="lang-switch" role="group" aria-label="Language / 語言">
+  <button type="button" data-set-lang="en" aria-pressed="true">EN</button>
+  <button type="button" data-set-lang="zh" aria-pressed="false">繁中</button>
+</div>
 
 <!-- ===================== HERO ===================== -->
 <header class="hero">
@@ -320,11 +395,13 @@ code{
         <li>Node <b>&ge;20.12</b></li>
         <li><b>MIT</b></li>
       </ul>
-      <h1>Your agent can <em>see</em> what it makes.</h1>
-      <p class="tagline">An MCP server that gives Claude Code, Claude Desktop and Cursor image generation powered by the Meta Muse model — and returns file paths instead of base64, so your context window survives.</p>
+      <h1 data-lang="en">Your agent can <em>see</em> what it makes.</h1>
+      <h1 data-lang="zh">讓你的 Agent <em>看得見</em>自己畫的東西。</h1>
+      <p class="tagline" data-lang="en">An MCP server that gives Claude Code, Claude Desktop and Cursor image generation powered by the Meta Muse model — and returns file paths instead of base64, so your context window survives.</p>
+      <p class="tagline" data-lang="zh">一個 MCP server，讓 Claude Code、Claude Desktop 與 Cursor 用 Meta Muse 模型生圖。回傳的是檔案路徑而不是 base64，你的 context 不會被圖片吃光。</p>
       <div class="hero-cta">
-        <a class="btn btn-primary" href="#install">Install in one line</a>
-        <a class="btn btn-ghost" href="https://github.com/kevintsai1202/muse-image-mcp">View on GitHub</a>
+        <a class="btn btn-primary" href="#install"><span data-lang="en">Install in one line</span><span data-lang="zh">一行指令安裝</span></a>
+        <a class="btn btn-ghost" href="https://github.com/kevintsai1202/muse-image-mcp"><span data-lang="en">View on GitHub</span><span data-lang="zh">在 GitHub 上看</span></a>
       </div>
     </div>
   </div>
@@ -333,25 +410,33 @@ code{
 <!-- ===================== 三工具 ===================== -->
 <section id="tools">
   <div class="wrap">
-    <p class="eyebrow">Three modes</p>
-    <h2>Start it, change it, or keep talking to it</h2>
-    <p class="section-lede">The three tools differ in one thing that matters more than the rest: whether the model remembers what you said last turn.</p>
+    <p class="eyebrow"><span data-lang="en">Three modes</span><span data-lang="zh">三種模式</span></p>
+    <h2 data-lang="en">Start it, change it, or keep talking to it</h2>
+    <h2 data-lang="zh">從零開始、改一次、或一直聊下去</h2>
+    <p class="section-lede" data-lang="en">The three tools differ in one thing that matters more than the rest: whether the model remembers what you said last turn.</p>
+    <p class="section-lede" data-lang="zh">三個工具最關鍵的差別只有一個：模型記不記得你上一輪說過什麼。</p>
 
     <div class="tools">
       <article class="tool">
         <h3>generate_image</h3>
-        <span class="when">Starting from nothing</span>
-        <p>Text in, images out. Use it for the first image of anything — and when you want several takes at once, since it's the only mode that returns up to 10 in a single call.</p>
+        <span class="when" data-lang="en">Starting from nothing</span>
+        <span class="when" data-lang="zh">從零開始</span>
+        <p data-lang="en">Text in, images out. Use it for the first image of anything — and when you want several takes at once, since it's the only mode that returns up to 10 in a single call.</p>
+        <p data-lang="zh">送文字、拿圖。任何東西的第一張都用它。也只有這個模式一次能回最多 10 張，想一次看好幾種版本時特別合用。</p>
       </article>
       <article class="tool">
         <h3>edit_image</h3>
-        <span class="when">One clear change</span>
-        <p>Hand it an existing image — a local path or a URL — plus a full description of the change. Each call stands alone, so it's the right choice when you can state the target precisely. Multiple inputs compose into one scene.</p>
+        <span class="when" data-lang="en">One clear change</span>
+        <span class="when" data-lang="zh">改一處，講得清楚</span>
+        <p data-lang="en">Hand it an existing image — a local path or a URL — plus a full description of the change. Each call stands alone, so it's the right choice when you can state the target precisely. Multiple inputs compose into one scene.</p>
+        <p data-lang="zh">給它一張既有的圖（本機路徑或網址），加上完整的修改描述。每次呼叫各自獨立，所以當你講得出明確目標時該用它。也可以丟多張圖合成同一個畫面。</p>
       </article>
       <article class="tool">
         <h3>iterate_image</h3>
-        <span class="when">Feeling your way there</span>
-        <p>The only mode with memory. Say <q>warmer</q>, then <q>too much, back off</q>, and it knows what you're talking about. Use it when you can't yet describe the destination, only the direction.</p>
+        <span class="when" data-lang="en">Feeling your way there</span>
+        <span class="when" data-lang="zh">邊做邊找方向</span>
+        <p data-lang="en">The only mode with memory. Say <q>warmer</q>, then <q>too much, back off</q>, and it knows what you're talking about. Use it when you can't yet describe the destination, only the direction.</p>
+        <p data-lang="zh">唯一有記憶的模式。說「再暖一點」，接著說「太過頭了，收回來一些」，它知道你在講什麼。當你還說不出想要什麼、只說得出方向時用它。</p>
       </article>
     </div>
 
@@ -367,31 +452,31 @@ code{
         </thead>
         <tbody>
           <tr>
-            <th scope="row">Remembers previous turns</th>
-            <td class="no">No</td>
-            <td class="no">No</td>
-            <td class="yes">Yes — via <code>previous_response_id</code></td>
+            <th scope="row"><span data-lang="en">Remembers previous turns</span><span data-lang="zh">記得前幾輪</span></th>
+            <td class="no"><span data-lang="en">No</span><span data-lang="zh">否</span></td>
+            <td class="no"><span data-lang="en">No</span><span data-lang="zh">否</span></td>
+            <td class="yes"><span data-lang="en">Yes — via</span><span data-lang="zh">是，靠</span> <code>previous_response_id</code></td>
           </tr>
           <tr>
-            <th scope="row">Input image</th>
-            <td>None</td>
-            <td>Required, one or more</td>
-            <td>Optional, first turn only</td>
+            <th scope="row"><span data-lang="en">Input image</span><span data-lang="zh">輸入圖片</span></th>
+            <td><span data-lang="en">None</span><span data-lang="zh">不需要</span></td>
+            <td><span data-lang="en">Required, one or more</span><span data-lang="zh">必填，可多張</span></td>
+            <td><span data-lang="en">Optional, first turn only</span><span data-lang="zh">選填，僅首輪</span></td>
           </tr>
           <tr>
-            <th scope="row">Images per call</th>
+            <th scope="row"><span data-lang="en">Images per call</span><span data-lang="zh">單次張數</span></th>
             <td>1–10</td>
             <td>1–10</td>
             <td>1</td>
           </tr>
           <tr>
-            <th scope="row">Default output format</th>
+            <th scope="row"><span data-lang="en">Default output format</span><span data-lang="zh">預設輸出格式</span></th>
             <td>png</td>
             <td>png</td>
             <td>webp</td>
           </tr>
           <tr>
-            <th scope="row">Endpoint</th>
+            <th scope="row"><span data-lang="en">Endpoint</span><span data-lang="zh">端點</span></th>
             <td><code>/images/generations</code></td>
             <td><code>/images/edits</code></td>
             <td><code>/responses</code></td>
@@ -400,9 +485,13 @@ code{
       </table>
     </div>
 
-    <p class="provenance">
+    <p class="provenance" data-lang="en">
       <strong>A practical rule.</strong>
       If you can write the finished result down in one sentence, use <code>edit_image</code> — it's cheaper to reason about and every call is reproducible. If you'd only know it when you see it, use <code>iterate_image</code> and talk your way there one nudge at a time.
+    </p>
+    <p class="provenance" data-lang="zh">
+      <strong>一個實用的判準。</strong>
+      如果你能用一句話寫出完成後的樣子，用 <code>edit_image</code>——它比較好推理，而且每次呼叫都可重現。如果你得看到才知道對不對，用 <code>iterate_image</code>，一次推一點地聊到位。
     </p>
   </div>
 </section>
@@ -410,11 +499,13 @@ code{
 <!-- ===================== 真實輸出 ===================== -->
 <section id="output">
   <div class="wrap">
-    <p class="eyebrow">Real output</p>
-    <h2>What each mode does to an image</h2>
-    <p class="section-lede">Both pairs below came out of this server while this page was being built. They show the difference the comparison table above can only assert.</p>
+    <p class="eyebrow"><span data-lang="en">Real output</span><span data-lang="zh">實際產出</span></p>
+    <h2 data-lang="en">What each mode does to an image</h2>
+    <h2 data-lang="zh">三種模式對一張圖各做了什麼</h2>
+    <p class="section-lede" data-lang="en">Both pairs below came out of this server while this page was being built. They show the difference the comparison table above can only assert.</p>
+    <p class="section-lede" data-lang="zh">下面兩組都是做這個頁面時，用這台 server 當場生出來的。上面那張表只能用講的，這裡直接看得到差別。</p>
 
-    <h3 class="demo-title">edit_image <span>— same frame, different light</span></h3>
+    <h3 class="demo-title">edit_image <span data-lang="en">— same frame, different light</span><span data-lang="zh">— 同一個畫面，換掉光線</span></h3>
 
     <div class="compare">
       <figure>
@@ -435,11 +526,14 @@ code{
       </figure>
     </div>
 
-    <p class="demo-note">
+    <p class="demo-note" data-lang="en">
       One <code>generate_image</code> call, then one <code>edit_image</code> call against its result. The composition, the objects, the camera angle — all survive. Only the light changes, because that's all the instruction asked for.
     </p>
+    <p class="demo-note" data-lang="zh">
+      一次 <code>generate_image</code>，接著對它的結果呼叫一次 <code>edit_image</code>。構圖、物件、視角全都留著，只有光線變了——因為指令只要求了這件事。
+    </p>
 
-    <h3 class="demo-title">iterate_image <span>— same conversation, new interpretation</span></h3>
+    <h3 class="demo-title">iterate_image <span data-lang="en">— same conversation, new interpretation</span><span data-lang="zh">— 同一段對話，重新詮釋</span></h3>
 
     <div class="compare">
       <figure>
@@ -460,13 +554,20 @@ code{
       </figure>
     </div>
 
-    <p class="demo-note">
+    <p class="demo-note" data-lang="en">
       Turn 2 sent <strong>one sentence and no image</strong> — just the id from turn 1. Notice what changed: not only the colour and the branch, but the vase's shape, the surface it stands on, the whole background. That's the honest difference between the two modes. <strong><code>edit_image</code> preserves the frame; <code>iterate_image</code> continues the conversation and re-renders the scene.</strong> Reach for iterate when you're still exploring, and for edit once you know exactly what you want changed.
     </p>
+    <p class="demo-note" data-lang="zh">
+      第二輪只送了<strong>一句話，沒有送圖</strong>，只帶第一輪的 id。看看變了什麼：不只是顏色和那根枝條，連花瓶的造型、底下的檯面、整個背景都換了。這就是兩個模式老實的差別——<strong><code>edit_image</code> 保留畫面，<code>iterate_image</code> 延續對話並重新渲染整個場景。</strong>還在摸索方向時用 iterate，確定要改哪裡時用 edit。
+    </p>
 
-    <p class="provenance">
+    <p class="provenance" data-lang="en">
       <strong>Every image on this page was made by this server.</strong>
       The prism at the top and all four frames here — generated during the build of this page, with the prompts printed next to them. Nothing is stock.
+    </p>
+    <p class="provenance" data-lang="zh">
+      <strong>這個頁面上每一張圖都是這台 server 生的。</strong>
+      最上面的稜鏡，以及這裡的四張，都是做這頁時當場生成的，prompt 就印在圖旁邊。沒有一張是圖庫素材。
     </p>
   </div>
 </section>
@@ -474,9 +575,11 @@ code{
 <!-- ===================== 在 Claude Code 怎麼用 ===================== -->
 <section id="usage">
   <div class="wrap">
-    <p class="eyebrow">In practice</p>
-    <h2>How you actually ask for an image</h2>
-    <p class="section-lede">You don't call the tool. You say what you want, and the agent picks the tool, fills the parameters, and hands you back a path on disk.</p>
+    <p class="eyebrow"><span data-lang="en">In practice</span><span data-lang="zh">實際用起來</span></p>
+    <h2 data-lang="en">How you actually ask for an image</h2>
+    <h2 data-lang="zh">你實際上是怎麼要一張圖的</h2>
+    <p class="section-lede" data-lang="en">You don't call the tool. You say what you want, and the agent picks the tool, fills the parameters, and hands you back a path on disk.</p>
+    <p class="section-lede" data-lang="zh">你不會去呼叫工具。你只要說你要什麼，Agent 會自己挑工具、填參數，然後把一個檔案路徑交回給你。</p>
 
     <div class="chat">
       <div class="chat-head">
@@ -487,7 +590,8 @@ code{
 
         <div class="turn you">
           <div class="role">you</div>
-          <p class="said">Make me a wide hero image of a glass prism splitting light on a dark surface.</p>
+          <p class="said" data-lang="en">Make me a wide hero image of a glass prism splitting light on a dark surface.</p>
+          <p class="said" data-lang="zh">幫我做一張寬幅的主視覺，深色檯面上的玻璃稜鏡把光分成光譜。</p>
         </div>
 
         <div class="turn">
@@ -506,7 +610,8 @@ code{
 
         <div class="turn you">
           <div class="role">you</div>
-          <p class="said">Cooler. Make it moonlight instead, and add some mist.</p>
+          <p class="said" data-lang="en">Cooler. Make it moonlight instead, and add some mist.</p>
+          <p class="said" data-lang="zh">冷一點，改成月光，再加一點霧氣。</p>
         </div>
 
         <div class="turn">
@@ -524,9 +629,13 @@ code{
       </div>
     </div>
 
-    <p class="provenance">
+    <p class="provenance" data-lang="en">
       <strong>Paths, not pixels.</strong>
       The agent gets a file path back — a single line of context — and reads the image only if it actually needs to look at it. Generating twenty images costs you twenty lines, not twenty megabytes of base64.
+    </p>
+    <p class="provenance" data-lang="zh">
+      <strong>回傳路徑，不是像素。</strong>
+      Agent 拿回的是一個檔案路徑，只佔一行 context；真的需要看圖時才去讀那個檔案。生二十張圖只花掉二十行，而不是二十 MB 的 base64。
     </p>
   </div>
 </section>
@@ -534,46 +643,61 @@ code{
 <!-- ===================== 安裝 ===================== -->
 <section id="install">
   <div class="wrap">
-    <p class="eyebrow">Install</p>
-    <h2>One line, no clone</h2>
-    <p class="section-lede">Published on npm. <code>npx</code> fetches and runs it on demand — there is nothing to install first.</p>
+    <p class="eyebrow"><span data-lang="en">Install</span><span data-lang="zh">安裝</span></p>
+    <h2 data-lang="en">One line, no clone</h2>
+    <h2 data-lang="zh">一行指令，不必 clone</h2>
+    <p class="section-lede" data-lang="en">Published on npm. <code>npx</code> fetches and runs it on demand — there is nothing to install first.</p>
+    <p class="section-lede" data-lang="zh">已發佈到 npm。<code>npx</code> 會在需要時自動抓下來執行，不必先安裝任何東西。</p>
 
     <ol class="steps">
       <li>
         <div>
-          <h3>Check your Node version</h3>
-          <p>This server uses Node's built-in <code>process.loadEnvFile()</code>, so anything below 20.12.0 fails at startup.</p>
+          <h3 data-lang="en">Check your Node version</h3>
+          <h3 data-lang="zh">確認 Node 版本</h3>
+          <p data-lang="en">This server uses Node's built-in <code>process.loadEnvFile()</code>, so anything below 20.12.0 fails at startup.</p>
+          <p data-lang="zh">這個 server 用到 Node 內建的 <code>process.loadEnvFile()</code>，低於 20.12.0 會在啟動時就失敗。</p>
           <div class="cmd">
-            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-node">Copy</button></div>
+            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-node"><span data-lang="en">Copy</span><span data-lang="zh">複製</span></button></div>
             <pre id="c-node">node -v</pre>
           </div>
         </div>
       </li>
       <li>
         <div>
-          <h3>Get a Meta Muse API key</h3>
-          <p>The key is the only required setting. Muse Image runs on the Meta Model API, so you register there, not with this project:</p>
-          <ol class="substeps">
+          <h3 data-lang="en">Get a Meta Muse API key</h3>
+          <h3 data-lang="zh">取得 Meta Muse API key</h3>
+          <p data-lang="en">The key is the only required setting. Muse Image runs on the Meta Model API, so you register there, not with this project:</p>
+          <p data-lang="zh">金鑰是唯一必填的設定。Muse Image 跑在 Meta Model API 上，所以你是向 Meta 註冊，不是向本專案註冊：</p>
+          <ol class="substeps" data-lang="en">
             <li>Go to <a href="https://dev.meta.ai">dev.meta.ai</a> and sign in to the Meta Model API dashboard.</li>
             <li>Open <strong>API keys</strong>.</li>
             <li>Click <strong>Create API key</strong> and copy it — this is the value you pass as <code>MUSE_API_KEY</code>.</li>
           </ol>
-          <p class="aside">Meta's own docs call this variable <code>MODEL_API_KEY</code>; this server reads it as <code>MUSE_API_KEY</code>, and talks to <code>https://api.meta.ai/v1</code> with the model <code>muse-image-1.0</code> by default. Reference: <a href="https://dev.meta.ai/docs">Model API docs</a> · <a href="https://dev.meta.ai/docs/image-generation">Image generation</a></p>
+          <ol class="substeps" data-lang="zh">
+            <li>前往 <a href="https://dev.meta.ai">dev.meta.ai</a>，登入 Meta Model API 後台。</li>
+            <li>開啟 <strong>API keys</strong>。</li>
+            <li>點 <strong>Create API key</strong> 並複製產生的金鑰——這就是要填進 <code>MUSE_API_KEY</code> 的值。</li>
+          </ol>
+          <p class="aside" data-lang="en">Meta's own docs call this variable <code>MODEL_API_KEY</code>; this server reads it as <code>MUSE_API_KEY</code>, and talks to <code>https://api.meta.ai/v1</code> with the model <code>muse-image-1.0</code> by default. Reference: <a href="https://dev.meta.ai/docs">Model API docs</a> · <a href="https://dev.meta.ai/docs/image-generation">Image generation</a></p>
+          <p class="aside" data-lang="zh">Meta 官方文件把這個變數叫 <code>MODEL_API_KEY</code>；本 server 讀的名稱是 <code>MUSE_API_KEY</code>，連線到 <code>https://api.meta.ai/v1</code>，預設模型為 <code>muse-image-1.0</code>。參考：<a href="https://dev.meta.ai/docs">Model API 文件</a> · <a href="https://dev.meta.ai/docs/image-generation">影像生成</a></p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Register the server</h3>
-          <p><code>-y</code> matters — without it npx stops on an interactive prompt and the handshake never completes.</p>
+          <h3 data-lang="en">Register the server</h3>
+          <h3 data-lang="zh">註冊這個 server</h3>
+          <p data-lang="en"><code>-y</code> matters — without it npx stops on an interactive prompt and the handshake never completes.</p>
+          <p data-lang="zh"><code>-y</code> 很重要——少了它，npx 會卡在互動詢問，握手永遠完成不了。</p>
           <div class="cmd">
-            <div class="cmd-head"><span>CLAUDE CODE</span><button class="copy" type="button" data-target="c-add">Copy</button></div>
+            <div class="cmd-head"><span>CLAUDE CODE</span><button class="copy" type="button" data-target="c-add"><span data-lang="en">Copy</span><span data-lang="zh">複製</span></button></div>
             <pre id="c-add">claude mcp add muse-image --scope user \
   --env MUSE_API_KEY=your-key \
   -- npx -y muse-image-mcp</pre>
           </div>
-          <p>For Claude Desktop or Cursor, write the config by hand instead:</p>
+          <p data-lang="en">For Claude Desktop or Cursor, write the config by hand instead:</p>
+          <p data-lang="zh">Claude Desktop 或 Cursor 則改成手動寫設定檔：</p>
           <div class="cmd">
-            <div class="cmd-head"><span>JSON</span><button class="copy" type="button" data-target="c-json">Copy</button></div>
+            <div class="cmd-head"><span>JSON</span><button class="copy" type="button" data-target="c-json"><span data-lang="en">Copy</span><span data-lang="zh">複製</span></button></div>
             <pre id="c-json">{
   "mcpServers": {
     "muse-image": {
@@ -588,25 +712,33 @@ code{
       </li>
       <li>
         <div>
-          <h3>Start a new session</h3>
-          <p>MCP servers load at session start. An existing session will not pick it up — this is the most common "I installed it but the tools aren't there".</p>
+          <h3 data-lang="en">Start a new session</h3>
+          <h3 data-lang="zh">重開一個新的 session</h3>
+          <p data-lang="en">MCP servers load at session start. An existing session will not pick it up — this is the most common "I installed it but the tools aren't there".</p>
+          <p data-lang="zh">MCP server 只在 session 啟動時載入，沿用舊的 session 不會生效——這是最常見的「裝好了但工具沒出現」。</p>
         </div>
       </li>
       <li>
         <div>
-          <h3>Confirm it connected</h3>
-          <p>You should see <code>muse-image: npx -y muse-image-mcp - Connected</code>, and three <code>mcp__muse-image__*</code> tools available.</p>
+          <h3 data-lang="en">Confirm it connected</h3>
+          <h3 data-lang="zh">確認連線成功</h3>
+          <p data-lang="en">You should see <code>muse-image: npx -y muse-image-mcp - Connected</code>, and three <code>mcp__muse-image__*</code> tools available.</p>
+          <p data-lang="zh">應該要看到 <code>muse-image: npx -y muse-image-mcp - Connected</code>，以及三個 <code>mcp__muse-image__*</code> 工具。</p>
           <div class="cmd">
-            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-list">Copy</button></div>
+            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-list"><span data-lang="en">Copy</span><span data-lang="zh">複製</span></button></div>
             <pre id="c-list">claude mcp list</pre>
           </div>
         </div>
       </li>
     </ol>
 
-    <p class="provenance">
+    <p class="provenance" data-lang="en">
       <strong>Where do the images go?</strong>
       By default <code>&lt;cwd&gt;/generated-images</code>, where <code>cwd</code> is whatever directory your client launched the server from — in Claude Code, your project root. Set <code>MUSE_OUTPUT_DIR</code> to an absolute path if you want them somewhere fixed.
+    </p>
+    <p class="provenance" data-lang="zh">
+      <strong>圖片會存到哪裡？</strong>
+      預設是 <code>&lt;cwd&gt;/generated-images</code>，而這個 <code>cwd</code> 是你的 client 啟動 server 時所在的目錄——在 Claude Code 就是你的專案根目錄。想固定位置就把 <code>MUSE_OUTPUT_DIR</code> 設成絕對路徑。
     </p>
   </div>
 </section>
@@ -614,19 +746,27 @@ code{
 <!-- ===================== 價格 ===================== -->
 <section id="pricing">
   <div class="wrap">
-    <p class="eyebrow">Pricing</p>
-    <h2>One number, and it's not ours</h2>
+    <p class="eyebrow"><span data-lang="en">Pricing</span><span data-lang="zh">計價</span></p>
+    <h2 data-lang="en">One number, and it's not ours</h2>
+    <h2 data-lang="zh">只有一個數字，而且不是我們收的</h2>
 
     <div class="price-grid">
       <div class="price-tag">
         <div class="price-num">$0.01</div>
-        <span class="price-unit">per generated image, paid to Meta</span>
+        <span class="price-unit" data-lang="en">per generated image, paid to Meta</span>
+        <span class="price-unit" data-lang="zh">每張生成的圖，付給 Meta</span>
       </div>
-      <ul class="price-points">
+      <ul class="price-points" data-lang="en">
         <li><strong>The server is free.</strong> MIT licensed, no account, no tier, no key of ours. You bring your own Meta Muse key and pay Meta directly.</li>
         <li><strong>Quality doesn't change the price.</strong> <code>reasoning_strength: high</code> and <code>low</code> cost the same — high is simply slower.</li>
         <li><strong>Every response tells you what it cost.</strong> The estimated cost is printed at the end of each tool result, so spend never hides in a long session.</li>
         <li><strong>The full smoke test costs six cents.</strong> That's the real end-to-end suite against the live API — a useful sense of scale.</li>
+      </ul>
+      <ul class="price-points" data-lang="zh">
+        <li><strong>這個 server 免費。</strong>MIT 授權，不用註冊、沒有方案分級、也不經手我們的金鑰。你自備 Meta Muse 金鑰，直接付給 Meta。</li>
+        <li><strong>畫質不影響價格。</strong><code>reasoning_strength</code> 的 <code>high</code> 與 <code>low</code> 同價，差別只在 high 比較慢。</li>
+        <li><strong>每次回應都告訴你花了多少。</strong>預估成本印在每次工具結果的末端，開銷不會在長對話裡默默累積。</li>
+        <li><strong>跑完整套煙霧測試是六分錢。</strong>那是真的打線上 API 的端到端測試，可以拿來抓規模感。</li>
       </ul>
     </div>
   </div>
@@ -634,7 +774,7 @@ code{
 
 <footer>
   <div class="wrap foot-row">
-    <div>MIT © Kevin Tsai · Not affiliated with Meta</div>
+    <div><span data-lang="en">MIT © Kevin Tsai · Not affiliated with Meta</span><span data-lang="zh">MIT © Kevin Tsai · 與 Meta 無隸屬關係</span></div>
     <div class="foot-links">
       <a href="https://github.com/kevintsai1202/muse-image-mcp">GitHub</a>
       <a href="https://www.npmjs.com/package/muse-image-mcp">npm</a>
@@ -645,25 +785,56 @@ code{
 </footer>
 
 <script>
-// 複製指令：剝除為了排版加上的反斜線換行，讓貼上去就能直接執行
+// ---------- 語系切換 ----------
+// 語系本身已由 head 的 inline script 在首次繪製前決定，這裡只負責按鈕互動。
+function currentLang() {
+  return document.documentElement.getAttribute('data-ui-lang') === 'zh' ? 'zh' : 'en';
+}
+
+function syncLangButtons(lang) {
+  document.querySelectorAll('[data-set-lang]').forEach(function (b) {
+    b.setAttribute('aria-pressed', String(b.dataset.setLang === lang));
+  });
+}
+
+function setLang(lang) {
+  var root = document.documentElement;
+  root.setAttribute('data-ui-lang', lang);
+  root.lang = lang === 'zh' ? 'zh-Hant' : 'en';
+  syncLangButtons(lang);
+  try { localStorage.setItem('muse-lang', lang); } catch (e) { /* 封鎖 storage 時就不記住 */ }
+}
+
+// 初始只同步按鈕外觀，不寫 localStorage——否則會把「從瀏覽器語言推斷的結果」
+// 固化成使用者的明確選擇，之後改瀏覽器語言就再也不生效了
+syncLangButtons(currentLang());
+
+document.querySelectorAll('[data-set-lang]').forEach(function (btn) {
+  btn.addEventListener('click', function () { setLang(btn.dataset.setLang); });
+});
+
+// ---------- 複製指令 ----------
+// 剝除為了排版加上的反斜線換行，讓貼上去就能直接執行。
+// 回饋文字用 class 切換交給 CSS 出字，不碰按鈕內容——按鈕裡是兩個語系的 span，
+// 直接改寫內容會把它們壓成一段死字，之後切語系就不會跟著變了。
 document.querySelectorAll('.copy').forEach(function (btn) {
   btn.addEventListener('click', async function () {
     var pre = document.getElementById(btn.dataset.target);
     if (!pre) return;
     var text = pre.textContent.replace(/\\\n\s+/g, ' ');
-    var original = btn.textContent;
+    btn.classList.remove('is-done', 'is-fallback');
     try {
       await navigator.clipboard.writeText(text);
-      btn.textContent = 'Copied';
+      btn.classList.add('is-done');
     } catch (e) {
       var range = document.createRange();
       range.selectNodeContents(pre);
       var sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(range);
-      btn.textContent = 'Press Ctrl+C';
+      btn.classList.add('is-fallback');
     }
-    setTimeout(function () { btn.textContent = original; }, 2000);
+    setTimeout(function () { btn.classList.remove('is-done', 'is-fallback'); }, 2000);
   });
 });
 </script>

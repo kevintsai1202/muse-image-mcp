@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/kevintsai1202/muse-image-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kevintsai1202/muse-image-mcp/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/muse-image-mcp)](https://www.npmjs.com/package/muse-image-mcp)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../LICENSE)
 
-[English](README.md) · **繁體中文** · [简体中文](README.zh-CN.md)
+[English](../README.md) · **繁體中文** · [简体中文](README.zh-CN.md)
 
 以 Meta Muse 影像模型提供生圖能力的 MCP server，讓任何支援 MCP 的 Agent——Claude Code、Claude Desktop、Cursor——都能畫圖。
 
@@ -294,4 +294,4 @@ npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，共產
 
 ## 授權
 
-[MIT](LICENSE) © Kevin Tsai
+[MIT](../LICENSE) © Kevin Tsai

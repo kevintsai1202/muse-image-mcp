@@ -4,7 +4,7 @@
 [![npm](https://img.shields.io/npm/v/muse-image-mcp)](https://www.npmjs.com/package/muse-image-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
+**English** · [繁體中文](docs/README.zh-TW.md) · [简体中文](docs/README.zh-CN.md)
 
 An MCP server that gives any MCP-capable agent — Claude Code, Claude Desktop, Cursor — image generation powered by the Meta Muse image model.
 

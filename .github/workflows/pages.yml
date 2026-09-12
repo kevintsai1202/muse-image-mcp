@@ -1,0 +1,55 @@
+# 把 site/ 目錄部署到 GitHub Pages。
+# 只在 site/ 或本 workflow 自身變動時觸發——程式碼改動不需要重新部署靜態頁，
+# 避免每次 push 都佔用 Pages 的部署佇列。
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  # 允許在 Actions 頁面手動觸發，用於首次部署或內容未變但需重推的情況
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一時間只允許一個部署；新的 push 進來時不中斷進行中的部署，
+# 讓已經開始的那次跑完，避免線上頁面出現半完成狀態。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: 設定 Pages
+        uses: actions/configure-pages@v5
+
+      - name: 確認站台檔案齊全
+        # 缺圖會是「部署成功但頁面沒圖」的無聲失敗，所以在上傳前先擋下來
+        run: |
+          set -e
+          for f in site/index.html site/images/hero.webp site/images/demo-generate.webp site/images/demo-edit.webp; do
+            [ -f "$f" ] || { echo "缺少檔案：$f"; exit 1; }
+          done
+          echo "站台檔案齊全"
+
+      - name: 上傳站台內容
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: 部署
+        id: deployment
+        uses: actions/deploy-pages@v4

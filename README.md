@@ -4,167 +4,221 @@
 [![npm](https://img.shields.io/npm/v/muse-image-mcp)](https://www.npmjs.com/package/muse-image-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-以 Meta Muse 影像模型提供生圖能力的 MCP server。支援文字生圖、依圖改圖、以及對話式多輪迭代修圖。
+**English** · [繁體中文](README.zh-TW.md) · [简体中文](README.zh-CN.md)
 
-## 需求
+An MCP server that gives any MCP-capable agent — Claude Code, Claude Desktop, Cursor — image generation powered by the Meta Muse image model.
+
+## What it does
+
+Three tools, covering the full loop of working with images in a conversation:
+
+| Tool | What it's for |
+|---|---|
+| `generate_image` | Text to image. 1–10 images per call. |
+| `edit_image` | Edit from reference images — local files or URLs. |
+| `iterate_image` | Conversational refinement. Keep saying "make it warmer" and it remembers. |
+
+## Why this server
+
+**Your context window survives.** Every tool writes images to disk and returns an **absolute file path** — never the image bytes. Generating a dozen images costs you a dozen lines of context instead of a dozen megabytes of base64. When you actually want to look at an image, open the path with a file-reading tool.
+
+**Multi-turn refinement without state.** `iterate_image` returns a `response_id`; feed it back as `previous_response_id` and the next turn continues the same conversation. The server itself stores nothing — conversation state lives on Meta's side, so the server stays restartable and stateless.
+
+**New models don't require a new release.** Switch models with `MUSE_MODEL` or a per-call `model` parameter, and pass parameters this server has never heard of through `extra_params`. Fields that determine request structure are protected from being overwritten; everything else is a deliberate escape hatch.
+
+**You always know what it cost.** Every response ends with the estimated cost of that call.
+
+## Requirements
 
 - Node.js >= 20.12.0
-- 一組 Meta Muse API key（於 <https://dev.meta.ai> 後台取得）
+- A Meta Muse API key
 
-## 安裝
+### Getting an API key
 
-### 方式一：npx（推薦，不需 clone）
+Muse Image runs on the **Meta Model API**, so you register with Meta — not with this project:
+
+1. Go to **<https://dev.meta.ai>** and sign in to the Meta Model API dashboard.
+2. Open **API keys**.
+3. Click **Create API key** and copy the value.
+
+That value is what you pass as `MUSE_API_KEY` below. Meta's own documentation calls this variable `MODEL_API_KEY`; this server reads it as `MUSE_API_KEY`, talks to `https://api.meta.ai/v1`, and defaults to the model `muse-image-1.0`.
+
+Reference: [Model API docs](https://dev.meta.ai/docs) · [Image generation](https://dev.meta.ai/docs/image-generation) · [Muse Image announcement](https://developer.meta.com/ai/resources/blog/build-with-muse-Image/)
+
+Keep the key out of source control — use the MCP config's `env` block or a `.env` file, both described below.
+
+## Install
+
+### Option 1: npx (recommended — no clone required)
 
 ```bash
-claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- npx -y muse-image-mcp
+claude mcp add muse-image --scope user --env MUSE_API_KEY=your-key -- npx -y muse-image-mcp
 ```
 
-`npx` 會自動抓取最新版執行，不需要先安裝。
+`npx` fetches and runs the latest version on demand — nothing to install first.
 
-### 方式二：本機 clone（要改程式碼時用）
+- `--scope user` applies it to every project; use `--scope local` for the current project only.
+- `-y` skips npx's install prompt. **Without it the server hangs on an interactive question and the handshake fails.**
+- Everything after `--` is the launch command; `--env` before it belongs to `claude mcp add`.
+
+For other MCP clients (Claude Desktop, Cursor), write the config by hand:
+
+```jsonc
+{
+  "mcpServers": {
+    "muse-image": {
+      "command": "npx",
+      "args": ["-y", "muse-image-mcp"],
+      "env": { "MUSE_API_KEY": "your-key" }
+    }
+  }
+}
+```
+
+On Windows, if `npx` can't be found, use `"command": "cmd"` with `"args": ["/c", "npx", "-y", "muse-image-mcp"]`.
+
+### Option 2: Local clone (when you want to change the code)
 
 ```bash
 git clone https://github.com/kevintsai1202/muse-image-mcp.git
 cd muse-image-mcp
 npm install
 npm run build
-claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- node <你 clone 的 muse-image-mcp 路徑>/dist/index.js
+claude mcp add muse-image --scope user --env MUSE_API_KEY=your-key -- node <your-clone-path>/dist/index.js
 ```
 
-裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
+### After installing
 
-## 設定 API key
+**Start a new session** — MCP servers are loaded at session start, so an existing session won't pick it up. Then confirm with `claude mcp list`, which should show `muse-image: ... - Connected`, and check that the three `mcp__muse-image__*` tools are available.
 
-優先序為 **MCP 設定的 `env` 區塊 > `.env` 檔**。
+## Configuring the API key
 
-### 用 MCP 設定的 env 區塊（npx 安裝時的唯一途徑）
+Precedence is **the `env` block in your MCP config > a `.env` file**.
 
-見上方 `--env MUSE_API_KEY=你的key`。
+### Using the MCP config `env` block (the only route when installed via npx)
 
-### 用 `.env` 檔
+See `--env MUSE_API_KEY=your-key` above.
 
-server 會依序搜尋下列位置，採用第一個存在的檔案：
+### Using a `.env` file
 
-1. `<套件根目錄>/.env` — 本機 clone 時最方便
-2. `~/.muse-image-mcp/.env` — 經 npx 安裝時使用者唯一可控的位置
+The server searches these locations in order and uses the first one that exists:
+
+1. `<package root>/.env` — convenient for a local clone
+2. `~/.muse-image-mcp/.env` — the only location you control when installed via npx
 
 ```
-MUSE_API_KEY=你的key
+MUSE_API_KEY=your-key
 ```
 
-注意 `.env` 不是從你執行 Claude Code 的專案目錄讀取——MCP server 的工作目錄由 client 決定，不適合放設定。`.env` 已列在 `.gitignore`，不會被提交。
+Note that `.env` is **not** read from the directory you launched Claude Code in — an MCP server's working directory is decided by the client, which makes it a poor place for configuration. When installed via npx the package itself lives in a hashed npm cache directory that gets cleaned up, so a `.env` there would be pointless.
 
-### 環境變數
+### Environment variables
 
-以下變數都可寫在 `.env` 或 MCP 設定的 `env` 區塊。
+All of these work in either `.env` or your MCP config's `env` block.
 
-| 變數 | 必填 | 預設 | 說明 |
+| Variable | Required | Default | Description |
 |---|---|---|---|
-| `MUSE_API_KEY` | 是 | — | API key。缺少時 server 會立刻結束並在 stderr 說明 |
-| `MUSE_MODEL` | 否 | `muse-image-1.0` | 全域預設模型 ID |
-| `MUSE_EXTRA_PARAMS` | 否 | `{}` | JSON 物件字串，全域預設額外參數 |
-| `MUSE_OUTPUT_DIR` | 否 | `<cwd>/generated-images` | 圖片輸出目錄，不存在時自動建立 |
-| `MUSE_BASE_URL` | 否 | `https://api.meta.ai/v1` | API base URL |
-| `MUSE_TIMEOUT_MS` | 否 | `120000` | 單次請求逾時毫秒數 |
+| `MUSE_API_KEY` | Yes | — | API key. Without it the server exits immediately and explains itself on stderr |
+| `MUSE_MODEL` | No | `muse-image-1.0` | Global default model ID |
+| `MUSE_EXTRA_PARAMS` | No | `{}` | JSON object string — global default extra parameters |
+| `MUSE_OUTPUT_DIR` | No | `<cwd>/generated-images` | Output directory, created if missing |
+| `MUSE_BASE_URL` | No | `https://api.meta.ai/v1` | API base URL |
+| `MUSE_TIMEOUT_MS` | No | `120000` | Per-request timeout in milliseconds |
 
-> `MUSE_OUTPUT_DIR` 的預設值 `<cwd>/generated-images` 所指的 `cwd`，是 MCP client 啟動這個 server 時所在的工作目錄。在 Claude Code 中即為你啟動 session 的專案根目錄，因此圖片會落在你目前專案下的 `generated-images/`。若你的 client 不是這個行為、或想要固定的輸出位置，請把 `MUSE_OUTPUT_DIR` 設為絕對路徑。
+> The `cwd` in `MUSE_OUTPUT_DIR`'s default is the working directory the MCP client launched the server from. In Claude Code that's the project root of your session, so images land in that project's `generated-images/`. If your client behaves differently, or you want a fixed location, set `MUSE_OUTPUT_DIR` to an absolute path.
 >
-> v0.1.0 起預設輸出目錄由 `muse-output/` 改為 `generated-images/`。舊目錄不會被自動刪除或搬移，如有舊圖請自行處理。
+> Since v0.1.0 the default output directory changed from `muse-output/` to `generated-images/`. The old directory is not deleted or migrated automatically.
 
-## 切換模型與額外參數
+## Switching models and passing new parameters
 
-新模型推出時不需要等本專案改版——用環境變數換模型，用 `extra_params` 送新參數。
+When a new model ships you don't have to wait for this project to update — switch models with an environment variable, send new parameters through `extra_params`.
 
-### 換模型
+### Switching models
 
-全域切換寫在 `.env` 或 MCP 設定：
+Globally, in `.env` or your MCP config:
 
 ```
 MUSE_MODEL=muse-image-2.0
 ```
 
-單次指定則直接在對話中要求，Agent 會帶 `model` 參數：
+Per call, just ask for it in conversation and the agent will pass `model`:
 
 ```jsonc
 { "prompt": "a red fox", "model": "muse-image-2.0" }
 ```
 
-### 送新參數
+### Passing new parameters
 
-全域預設寫成 JSON 物件字串：
+Global defaults as a JSON object string:
 
 ```
 MUSE_EXTRA_PARAMS={"quality":"ultra"}
 ```
 
-單次覆寫用 `extra_params`，會與全域設定合併、單次的優先：
+Per-call overrides via `extra_params`, merged with the global setting — the per-call value wins:
 
 ```jsonc
 { "prompt": "a red fox", "extra_params": { "style_preset": "anime" } }
 ```
 
-### 核心欄位保護
+### Protected core fields
 
-`model`、`prompt`、`response_format`、`images`、`input`、`store`、`previous_response_id` 這些決定請求結構的欄位不會被 `extra_params` 覆寫——寫了也不生效，並且會在回應末端看到：
+`model`, `prompt`, `response_format`, `images`, `input`, `store`, and `previous_response_id` determine the structure of the request and cannot be overwritten by `extra_params`. Setting them there has no effect, and the response will end with a warning listing the ignored keys.
 
-```
-⚠️ 下列 extra_params 與請求核心欄位衝突，已忽略：model, prompt
-```
+To change models, use the `model` parameter or `MUSE_MODEL` — not `extra_params`.
 
-換模型請用 `model` 參數或 `MUSE_MODEL`，不要寫在 `extra_params` 裡。
+Outside those core fields, `extra_params` **does** override same-named regular parameters, including `n`, `size`, `output_format`, and `reasoning_strength`. The tool schema's validation for these (for example `n` being limited to 1–10) **does not apply** on this path — that's a deliberate escape hatch so a future model that changes parameter semantics isn't blocked by today's limits. When overriding `n` this way, watch your image count and cost.
 
-除上述核心欄位外，`extra_params` 會覆寫同名的一般參數，包含 `n`、`size`、`output_format`、`reasoning_strength`。這些欄位在工具 schema 上的取值驗證（例如 `n` 限 1–10）在此路徑下**不生效**——這是刻意保留的逃生口，讓新模型改變參數語意時仍可繞過既有限制。使用 `extra_params` 覆寫 `n` 時請自行留意張數與成本。
+## Tools
 
-## 工具
+Every tool saves images locally and returns **absolute paths**, never the image content itself — this keeps base64 out of your conversation context. Open the path with a file-reading tool when you want to see the image.
 
-所有工具都把圖片存到本機並回傳**絕對路徑**，不回傳圖片內容本身——這是為了避免 base64 佔用大量對話 context。需要看圖時用檔案讀取工具開啟該路徑即可。
+### `generate_image` — text to image
 
-### `generate_image` — 文字生圖
-
-| 參數 | 必填 | 預設 | 說明 |
+| Parameter | Required | Default | Description |
 |---|---|---|---|
-| `prompt` | 是 | — | 圖片描述 |
-| `n` | 否 | 1 | 生成張數，1–10 |
-| `size` | 否 | — | **長寬比**字串如 `1792x1024`，非精確像素解析度 |
-| `output_format` | 否 | `png` | `png` / `webp` / `jpeg` |
-| `reasoning_strength` | 否 | `high` | `high` / `low`，計價相同 |
-| `filename_prefix` | 否 | `muse` | 輸出檔名前綴 |
-| `model` | 否 | — | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
-| `extra_params` | 否 | — | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
+| `prompt` | Yes | — | Image description |
+| `n` | No | 1 | Number of images, 1–10 |
+| `size` | No | — | **Aspect ratio** string such as `1792x1024` — not an exact pixel resolution |
+| `output_format` | No | `png` | `png` / `webp` / `jpeg` |
+| `reasoning_strength` | No | `high` | `high` / `low` — priced the same |
+| `filename_prefix` | No | `muse` | Output filename prefix |
+| `model` | No | — | Model ID; omit to use the server default (see `MUSE_MODEL`) |
+| `extra_params` | No | — | Object of extra parameters, merged with `MUSE_EXTRA_PARAMS` with per-call priority; core fields are protected (see above) |
 
-### `edit_image` — 依圖改圖
+### `edit_image` — edit from reference images
 
-| 參數 | 必填 | 預設 | 說明 |
+| Parameter | Required | Default | Description |
 |---|---|---|---|
-| `prompt` | 是 | — | 圖片描述 |
-| `images` | 是 | — | 本機檔案路徑（png/jpg/jpeg/webp/gif）或 http(s) 網址的陣列。本機檔案會自動轉成 base64 |
-| `n` | 否 | 1 | 生成張數，1–10 |
-| `size` | 否 | — | **長寬比**字串如 `1792x1024`，非精確像素解析度 |
-| `output_format` | 否 | `png` | `png` / `webp` / `jpeg` |
-| `reasoning_strength` | 否 | `high` | `high` / `low`，計價相同 |
-| `filename_prefix` | 否 | `muse-edit` | 輸出檔名前綴 |
-| `model` | 否 | — | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
-| `extra_params` | 否 | — | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
+| `prompt` | Yes | — | Image description |
+| `images` | Yes | — | Array of local file paths (png/jpg/jpeg/webp/gif) or http(s) URLs. Local files are base64-encoded automatically |
+| `n` | No | 1 | Number of images, 1–10 |
+| `size` | No | — | **Aspect ratio** string such as `1792x1024` — not an exact pixel resolution |
+| `output_format` | No | `png` | `png` / `webp` / `jpeg` |
+| `reasoning_strength` | No | `high` | `high` / `low` — priced the same |
+| `filename_prefix` | No | `muse-edit` | Output filename prefix |
+| `model` | No | — | Model ID; omit to use the server default |
+| `extra_params` | No | — | Same merge and protection rules as above |
 
-### `iterate_image` — 對話式迭代修圖
+### `iterate_image` — conversational refinement
 
-| 參數 | 必填 | 說明 |
+| Parameter | Required | Description |
 |---|---|---|
-| `prompt` | 是 | 本輪修改指令 |
-| `previous_response_id` | 否 | 上一輪回傳的 id；省略代表開新對話 |
-| `images` | 否 | 首輪參考圖 |
-| `reasoning_strength` | 否 | 預設 `high` |
-| `filename_prefix` | 否 | 預設 `muse-iter` |
-| `model` | 否 | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
-| `extra_params` | 否 | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
+| `prompt` | Yes | This turn's instruction |
+| `previous_response_id` | No | The id returned by the previous turn; omit to start a new conversation |
+| `images` | No | Reference images for the first turn |
+| `reasoning_strength` | No | Defaults to `high` |
+| `filename_prefix` | No | Defaults to `muse-iter` |
+| `model` | No | Model ID; omit to use the server default |
+| `extra_params` | No | Same merge and protection rules as above |
 
-注意此工具**沒有** `n`、`size`、`output_format` 參數——`/v1/responses` 端點一次只回傳一張圖，且不接受輸出格式參數（見下方「`/v1/responses` 實測結果」，未指定時 Meta 端預設輸出 webp）。
+This tool deliberately has **no** `n`, `size`, or `output_format` parameters — the `/v1/responses` endpoint returns one image at a time and doesn't accept an output format parameter (see the findings below; when unspecified, Meta's default output is webp).
 
-回應**一定包含 `response_id`**。下一輪把它填進 `previous_response_id` 即可延續同一段對話。本 server 不保存任何對話狀態，對話由 Meta 端保存。
+The response **always includes a `response_id`**. Pass it as `previous_response_id` on the next call to continue the same conversation. This server stores no conversation state; Meta does.
 
-## `/v1/responses` 實測結果
+## Findings from `/v1/responses`
 
-Meta 未公開 `/v1/responses` 的回應 schema，Task 3 實作時是比照 OpenAI Responses 慣例的推測。Task 6 以真實 API 呼叫（`iterate_image`）驗證後，實際結構如下：
+Meta doesn't publish the response schema for `/v1/responses`. The original implementation was an educated guess modeled on OpenAI's Responses convention; it was later verified against real API calls. The actual structure:
 
 ```json
 {
@@ -175,29 +229,37 @@ Meta 未公開 `/v1/responses` 的回應 schema，Task 3 實作時是比照 Open
   "output": [
     { "type": "reasoning", "summary": [{ "type": "summary_text", "text": "..." }] },
     { "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "" }] },
-    { "type": "image_generation_call", "id": "ig_...", "status": "completed", "result": "<base64 圖片資料>" }
+    { "type": "image_generation_call", "id": "ig_...", "status": "completed", "result": "<base64 image data>" }
   ]
 }
 ```
 
-與推測形狀的差異：
+Differences from the guessed shape:
 
-- **`id` 取值路徑**：`raw.id` 猜對了，實測確認正確，無需修改。
-- **圖片資料位置**：不在任何 `b64_json` 欄位，而是在 `output[]` 陣列中 `type === "image_generation_call"` 項目的 `result` 欄位，值直接是 base64（無 data URL 前綴）。`src/muse-client.ts` 的 `extractB64Images` 已改為同時辨識 `b64_json`（保留給其他可能形狀）與這個實測到的 `image_generation_call.result` 形狀。
-- **`output_format` 欄位不存在**：回應中完全沒有 `output_format` 欄位。原本的 fallback 預設值 `"png"`是錯的——iterate 因為送出的 request 不帶 `output_format` 參數，Meta 端套用了與 `/images/generations` 相同的預設值 `webp`，實測回傳的 base64 解出來確實是 WebP 格式（RIFF/WEBP 檔頭）。fallback 已改為 `"webp"`。
+- **`id` location**: `raw.id` was correct, confirmed by testing. No change needed.
+- **Image data location**: not in any `b64_json` field, but in the `result` field of the `output[]` entry where `type === "image_generation_call"`, as raw base64 with no data URL prefix. `src/muse-client.ts`'s `extractB64Images` now recognizes both `b64_json` (kept for other possible shapes) and this verified shape.
+- **No `output_format` field**: the response has none. The original fallback default of `"png"` was wrong — since the iterate request doesn't send an `output_format` parameter, Meta applies the same default as `/images/generations`, which is `webp`. The returned base64 decodes to a genuine WebP file (RIFF/WEBP header). The fallback is now `"webp"`.
 
-### 多輪對話（`previous_response_id`）已實測驗證
+### Multi-turn conversation is verified
 
-Task 7 以真實 API 做了兩輪對話：先呼叫一次 `iterate_image` 取得 `response_id`，再用該 id 當 `previous_response_id` 呼叫第二輪。結果：第二輪只回傳當輪新生成的 **1 張圖片**，並未把第一輪已經生成過的圖片也重複帶回來——`extractB64Images` 的深度走訪邏輯對此無需修改。（受限於測試工具在該次執行中未能完整擷取第二輪原始回應的逐位元組內容，這個結論是以「輸出檔案數量剛好 1 個、無 -2/-3 等後續序號」的檔案系統證據佐證，而非逐位元組比對；`tests/muse-client.test.ts` 中新增的 pinning test 沿用 Task 6 已驗證的真實回應形狀來釘住這個行為。）
+Two real API calls were made in sequence: one `iterate_image` to obtain a `response_id`, then a second call using that id as `previous_response_id`. The second turn returned **only the one image generated in that turn** — it did not re-send the first turn's image. `extractB64Images`'s deep-traversal logic needed no changes for this.
 
-## 計價
+(The test tooling in that run didn't capture the second turn's raw response byte-for-byte, so this conclusion rests on filesystem evidence — exactly one output file, with no `-2`/`-3` suffixes — rather than a byte-level comparison. The pinning test added in `tests/muse-client.test.ts` uses the real response shape verified earlier.)
 
-每張生成圖片 **US$0.01**，與 `reasoning_strength` 無關。每次工具回應都會揭露該次的預估成本。
+## Pricing
 
-## 開發
+**US$0.01 per generated image**, regardless of `reasoning_strength`. Every tool response discloses the estimated cost of that call.
+
+This server is free and MIT-licensed — you pay Meta for API usage, nothing else.
+
+## Development
 
 ```bash
-npm test          # 單元測試（不會打真實 API）
-npm run build     # 編譯到 dist/
-npm run smoke     # 真實 API 煙霧測試，需 MUSE_E2E=1 與真 key，共產生 6 張圖，約花費 US$0.06
+npm test          # Unit tests (never hits the real API)
+npm run build     # Compile to dist/
+npm run smoke     # Real-API smoke test; needs MUSE_E2E=1 and a real key. Generates 6 images, about US$0.06
 ```
+
+## License
+
+[MIT](LICENSE) © Kevin Tsai

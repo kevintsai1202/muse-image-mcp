@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>muse-image-mcp — image generation for your coding agent</title>
+<meta name="description" content="An MCP server that gives Claude Code, Claude Desktop and Cursor image generation powered by the Meta Muse model. Returns file paths, not base64 — your context window survives.">
+
+<meta property="og:title" content="muse-image-mcp">
+<meta property="og:description" content="Image generation for your coding agent. Returns file paths, not base64.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://kevintsai1202.github.io/muse-image-mcp/images/hero.webp">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+/* ============================================================
+   muse-image-mcp — 宣傳頁樣式
+   刻意採單一深色視覺：頁面主角是深色攝影棚調性的生成影像，
+   淺色底會與圖片打架，故不做雙主題，但所有顏色都明確宣告，
+   確保在任何 host 底色下都成立。
+   配色直接取自 hero 圖（稜鏡分光）與 demo 圖（暖陽／冷月）。
+   ============================================================ */
+:root{
+  --void:#08090B;        /* 頁面底，貼近 hero 圖的黑 */
+  --surface:#111318;     /* 區塊底 */
+  --surface-2:#171A21;   /* 巢狀區塊 */
+  --line:#252A33;        /* 分隔線 */
+  --text:#EEF1F5;
+  --muted:#8E97A6;       /* 中性灰帶藍偏，非純灰 */
+  --cyan:#3FC9F0;        /* 主強調，取自 hero 光譜的青 */
+  --amber:#F0A93F;       /* 次強調，取自 demo 的暖陽 */
+  --code-bg:#0C0E12;
+  --radius:14px;
+  --maxw:1080px;
+}
+
+*{ box-sizing:border-box; }
+html{ scroll-behavior:smooth; }
+@media (prefers-reduced-motion:reduce){ html{ scroll-behavior:auto; } }
+
+body{
+  margin:0;
+  background:var(--void);
+  color:var(--text);
+  font-family:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  font-size:16px;
+  line-height:1.7;
+  -webkit-font-smoothing:antialiased;
+}
+
+img{ max-width:100%; display:block; }
+a{ color:var(--cyan); text-underline-offset:3px; }
+a:focus-visible,button:focus-visible{ outline:2px solid var(--cyan); outline-offset:3px; border-radius:4px; }
+
+.wrap{ max-width:var(--maxw); margin:0 auto; padding-inline:20px; }
+
+/* ---------- Hero ----------
+   圖與文字分離：稜鏡是全站最好的素材，疊字會正好蓋住它。
+   圖片獨立為一條 banner，底部用漸層融進頁面底色，文字接在下方。 */
+.hero{ border-bottom:1px solid var(--line); }
+.hero-figure{ position:relative; }
+.hero-img{
+  width:100%; aspect-ratio:21/9; max-height:56vh;
+  object-fit:cover; object-position:center 52%;
+}
+.hero-veil{
+  position:absolute; inset:0;
+  pointer-events:none;
+  background:linear-gradient(to bottom, rgba(8,9,11,.35) 0%, rgba(8,9,11,0) 30%, rgba(8,9,11,.55) 82%, var(--void) 100%);
+}
+.hero-body{ padding-block:30px 54px; margin-top:-6px; }
+.hero h1{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-weight:400;
+  font-size:clamp(2.6rem,7vw,4.6rem);
+  line-height:1.05;
+  letter-spacing:-.01em;
+  margin:0 0 12px;
+  text-wrap:balance;
+}
+.hero h1 em{ font-style:italic; color:var(--cyan); }
+.hero .tagline{
+  font-size:clamp(1rem,2.2vw,1.18rem);
+  color:var(--text);
+  max-width:38em;
+  margin:0 0 22px;
+  text-shadow:0 1px 12px rgba(0,0,0,.6);
+}
+.hero-cta{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+
+.badge-row{ display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; padding:0; list-style:none; }
+.badge-row li{
+  font-family:'IBM Plex Mono',monospace; font-size:.74rem;
+  padding:3px 10px; border:1px solid var(--line); border-radius:999px;
+  background:rgba(8,9,11,.6); color:var(--muted);
+}
+.badge-row b{ color:var(--text); font-weight:500; }
+
+.btn{
+  display:inline-block;
+  font-weight:600; font-size:.92rem;
+  padding:10px 20px; border-radius:10px;
+  text-decoration:none;
+  border:1px solid transparent;
+  transition:background .15s ease, border-color .15s ease;
+}
+.btn-primary{ background:var(--cyan); color:#04252E; }
+.btn-primary:hover{ background:#6FD9F5; }
+.btn-ghost{ border-color:var(--line); color:var(--text); background:rgba(17,19,24,.7); }
+.btn-ghost:hover{ border-color:var(--cyan); }
+
+/* ---------- 區塊通用 ---------- */
+section{ padding-block:72px; }
+section + section{ border-top:1px solid var(--line); }
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.74rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--cyan); margin:0 0 10px;
+}
+h2{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-weight:400; font-size:clamp(1.9rem,4.4vw,2.7rem);
+  line-height:1.15; margin:0 0 14px; text-wrap:balance;
+}
+.section-lede{ color:var(--muted); max-width:60ch; margin:0 0 36px; font-size:1.02rem; }
+
+/* ---------- 三工具 ---------- */
+.tools{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+.tool{ background:var(--surface); padding:26px 22px; }
+.tool h3{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.95rem; font-weight:500; color:var(--cyan);
+  margin:0 0 8px;
+}
+.tool p{ margin:0; color:var(--muted); font-size:.93rem; }
+
+/* ---------- before / after ---------- */
+.compare{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+@media (max-width:720px){ .compare{ grid-template-columns:1fr; } }
+figure{ margin:0; }
+figure img{ width:100%; border-radius:var(--radius); border:1px solid var(--line); }
+figcaption{ margin-top:12px; font-size:.86rem; color:var(--muted); }
+figcaption .who{
+  display:inline-block; font-family:'IBM Plex Mono',monospace;
+  font-size:.74rem; color:var(--void); background:var(--cyan);
+  padding:1px 8px; border-radius:5px; margin-right:8px; font-weight:500;
+}
+figcaption .who.amber{ background:var(--amber); }
+figcaption q{ color:var(--text); font-style:italic; }
+
+.provenance{
+  margin-top:26px; padding:14px 18px;
+  border-left:2px solid var(--amber);
+  background:var(--surface); border-radius:0 var(--radius) var(--radius) 0;
+  font-size:.9rem; color:var(--muted);
+}
+.provenance strong{ color:var(--text); font-weight:600; }
+
+/* ---------- 對話範例 ---------- */
+.chat{
+  border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--surface); overflow:hidden;
+}
+.chat-head{
+  display:flex; align-items:center; gap:8px;
+  padding:10px 16px; border-bottom:1px solid var(--line);
+  background:var(--surface-2);
+  font-family:'IBM Plex Mono',monospace; font-size:.76rem; color:var(--muted);
+}
+.dot{ width:9px; height:9px; border-radius:50%; background:#3A3F4A; }
+.dot.live{ background:var(--cyan); }
+.chat-body{ padding:18px 16px; display:flex; flex-direction:column; gap:16px; }
+.turn{ display:grid; grid-template-columns:70px 1fr; gap:12px; align-items:start; }
+@media (max-width:520px){ .turn{ grid-template-columns:1fr; gap:4px; } }
+.turn .role{
+  font-family:'IBM Plex Mono',monospace; font-size:.72rem;
+  color:var(--muted); padding-top:3px; letter-spacing:.06em;
+}
+.turn.you .role{ color:var(--amber); }
+.turn .said{ margin:0; }
+.turn .said em{ color:var(--muted); font-style:normal; }
+.tool-call{
+  font-family:'IBM Plex Mono',monospace; font-size:.8rem;
+  background:var(--code-bg); border:1px solid var(--line);
+  border-radius:8px; padding:10px 12px; color:var(--cyan);
+  overflow-x:auto; white-space:pre;
+}
+.tool-out{
+  font-family:'IBM Plex Mono',monospace; font-size:.79rem;
+  color:var(--muted); margin-top:8px; white-space:pre-wrap; word-break:break-all;
+}
+
+/* ---------- 指令區 ---------- */
+.cmd{ border:1px solid var(--line); border-radius:10px; background:var(--code-bg); overflow:hidden; margin-bottom:14px; }
+.cmd-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:6px 8px 6px 14px; border-bottom:1px solid var(--line);
+}
+.cmd-head span{ font-family:'IBM Plex Mono',monospace; font-size:.7rem; letter-spacing:.12em; color:var(--muted); }
+.cmd pre{
+  margin:0; padding:14px; overflow-x:auto;
+  font-family:'IBM Plex Mono',monospace; font-size:.84rem; line-height:1.7; color:#D8E6EE;
+  white-space:pre;
+}
+.copy{
+  font-family:'IBM Plex Sans',sans-serif; font-size:.74rem; font-weight:600;
+  padding:4px 12px; border:1px solid var(--line); border-radius:7px;
+  background:transparent; color:var(--muted); cursor:pointer;
+  transition:color .15s ease, border-color .15s ease;
+}
+.copy:hover{ color:var(--cyan); border-color:var(--cyan); }
+
+.steps{ counter-reset:s; list-style:none; padding:0; margin:0 0 30px; display:flex; flex-direction:column; gap:22px; }
+.steps > li{ counter-increment:s; display:grid; grid-template-columns:34px 1fr; gap:14px; }
+.steps > li::before{
+  content:counter(s);
+  font-family:'IBM Plex Mono',monospace; font-size:.82rem;
+  width:28px; height:28px; display:grid; place-items:center;
+  border:1px solid var(--cyan); border-radius:50%; color:var(--cyan);
+}
+.steps h3{ margin:2px 0 8px; font-size:1.02rem; font-weight:600; }
+.steps p{ margin:0 0 10px; color:var(--muted); font-size:.93rem; }
+.steps p:last-child{ margin-bottom:0; }
+
+/* 註冊流程的子步驟：用方框編號與主步驟的圓形編號區隔層級 */
+.substeps{ margin:0 0 12px; padding-left:1.3em; color:var(--muted); font-size:.93rem; }
+.substeps li{ margin-bottom:5px; }
+.substeps strong{ color:var(--text); font-weight:600; }
+.aside{ font-size:.86rem !important; color:var(--muted); border-left:1px solid var(--line); padding-left:12px; }
+
+/* ---------- 價格 ---------- */
+.price-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:34px; align-items:center; }
+@media (max-width:720px){ .price-grid{ grid-template-columns:1fr; gap:24px; } }
+.price-tag{
+  border:1px solid var(--line); border-radius:var(--radius);
+  background:var(--surface); padding:30px 26px; text-align:center;
+}
+.price-num{
+  font-family:'Instrument Serif',Georgia,serif;
+  font-size:clamp(3.2rem,9vw,4.6rem); line-height:1;
+  color:var(--amber); font-variant-numeric:tabular-nums;
+}
+.price-unit{ display:block; margin-top:8px; color:var(--muted); font-size:.9rem; }
+.price-points{ margin:0; padding:0; list-style:none; display:flex; flex-direction:column; gap:14px; }
+.price-points li{ padding-left:22px; position:relative; color:var(--muted); font-size:.95rem; }
+.price-points li::before{ content:""; position:absolute; left:0; top:.62em; width:7px; height:7px; border-radius:50%; background:var(--cyan); }
+.price-points strong{ color:var(--text); font-weight:600; }
+
+/* ---------- Footer ---------- */
+footer{
+  border-top:1px solid var(--line); padding-block:34px;
+  color:var(--muted); font-size:.88rem;
+}
+.foot-row{ display:flex; flex-wrap:wrap; gap:18px; justify-content:space-between; align-items:center; }
+.foot-links{ display:flex; flex-wrap:wrap; gap:16px; }
+
+code{
+  font-family:'IBM Plex Mono',monospace; font-size:.88em;
+  background:var(--surface-2); border:1px solid var(--line);
+  border-radius:5px; padding:1px 5px; color:var(--text);
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== HERO ===================== -->
+<header class="hero">
+  <div class="hero-figure">
+    <img class="hero-img" src="images/hero.webp"
+         alt="A glass prism on a dark surface splitting a beam of white light into a rainbow spectrum — generated by this MCP server."
+         width="1600" height="914" fetchpriority="high">
+    <div class="hero-veil"></div>
+  </div>
+  <div class="hero-body">
+    <div class="wrap">
+      <ul class="badge-row">
+        <li>npm <b>muse-image-mcp</b></li>
+        <li>Node <b>&ge;20.12</b></li>
+        <li><b>MIT</b></li>
+      </ul>
+      <h1>Your agent can <em>see</em> what it makes.</h1>
+      <p class="tagline">An MCP server that gives Claude Code, Claude Desktop and Cursor image generation powered by the Meta Muse model — and returns file paths instead of base64, so your context window survives.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary" href="#install">Install in one line</a>
+        <a class="btn btn-ghost" href="https://github.com/kevintsai1202/muse-image-mcp">View on GitHub</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ===================== 三工具 ===================== -->
+<section id="tools">
+  <div class="wrap">
+    <p class="eyebrow">Three tools</p>
+    <h2>The whole loop, inside the conversation</h2>
+    <p class="section-lede">Describe it, change it, keep refining it — without leaving your editor or pasting an image anywhere.</p>
+
+    <div class="tools">
+      <article class="tool">
+        <h3>generate_image</h3>
+        <p>Text to image, 1–10 per call. Aspect ratio, output format and filename prefix are all yours to set.</p>
+      </article>
+      <article class="tool">
+        <h3>edit_image</h3>
+        <p>Edit from reference images — local file paths or URLs. Local files are base64-encoded for you.</p>
+      </article>
+      <article class="tool">
+        <h3>iterate_image</h3>
+        <p>Conversational refinement. Each response carries an id; pass it back and the next turn continues the same thread.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== 真實輸出 ===================== -->
+<section id="output">
+  <div class="wrap">
+    <p class="eyebrow">Real output</p>
+    <h2>Same frame, different light</h2>
+    <p class="section-lede">One <code>generate_image</code> call, then one <code>edit_image</code> call against its result. The composition survives; only the light changes.</p>
+
+    <div class="compare">
+      <figure>
+        <img src="images/demo-generate.webp" width="900" height="900" loading="lazy"
+             alt="A brass compass open on an antique nautical map, lit by warm afternoon window light.">
+        <figcaption>
+          <span class="who amber">generate_image</span>
+          <q>A weathered brass compass resting on an unfolded antique nautical map, warm afternoon window light, shallow depth of field, photographic still life</q>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="images/demo-edit.webp" width="900" height="900" loading="lazy"
+             alt="The same compass and map, now lit by cold blue moonlight with mist drifting across the scene.">
+        <figcaption>
+          <span class="who">edit_image</span>
+          <q>Change the warm afternoon light to cold blue moonlight, and add a light mist drifting over the map</q>
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="provenance">
+      <strong>Every image on this page was made by this server.</strong>
+      The prism above, and both frames here — generated during the build of this page, with the prompts printed next to them. Nothing is stock.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 在 Claude Code 怎麼用 ===================== -->
+<section id="usage">
+  <div class="wrap">
+    <p class="eyebrow">In practice</p>
+    <h2>How you actually ask for an image</h2>
+    <p class="section-lede">You don't call the tool. You say what you want, and the agent picks the tool, fills the parameters, and hands you back a path on disk.</p>
+
+    <div class="chat">
+      <div class="chat-head">
+        <span class="dot live"></span><span class="dot"></span><span class="dot"></span>
+        <span>claude code — muse-image connected</span>
+      </div>
+      <div class="chat-body">
+
+        <div class="turn you">
+          <div class="role">you</div>
+          <p class="said">Make me a wide hero image of a glass prism splitting light on a dark surface.</p>
+        </div>
+
+        <div class="turn">
+          <div class="role">claude</div>
+          <div>
+            <div class="tool-call">generate_image({
+  prompt: "A single translucent glass prism ... soft spectrum",
+  size: "1792x1024"
+})</div>
+            <div class="tool-out">已生成 1 張圖片：
+1. D:\project\generated-images\muse-20260912-153810-1.png
+
+預估成本：US$0.01（1 張 x US$0.01）</div>
+          </div>
+        </div>
+
+        <div class="turn you">
+          <div class="role">you</div>
+          <p class="said">Cooler. Make it moonlight instead, and add some mist.</p>
+        </div>
+
+        <div class="turn">
+          <div class="role">claude</div>
+          <div>
+            <div class="tool-call">edit_image({
+  images: ["D:\\project\\generated-images\\muse-20260912-153810-1.png"],
+  prompt: "Change the warm light to cold blue moonlight, add a light mist"
+})</div>
+            <div class="tool-out">已生成 1 張圖片：
+1. D:\project\generated-images\muse-edit-20260912-153908-1.png</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <p class="provenance">
+      <strong>Paths, not pixels.</strong>
+      The agent gets a file path back — a single line of context — and reads the image only if it actually needs to look at it. Generating twenty images costs you twenty lines, not twenty megabytes of base64.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 安裝 ===================== -->
+<section id="install">
+  <div class="wrap">
+    <p class="eyebrow">Install</p>
+    <h2>One line, no clone</h2>
+    <p class="section-lede">Published on npm. <code>npx</code> fetches and runs it on demand — there is nothing to install first.</p>
+
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Check your Node version</h3>
+          <p>This server uses Node's built-in <code>process.loadEnvFile()</code>, so anything below 20.12.0 fails at startup.</p>
+          <div class="cmd">
+            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-node">Copy</button></div>
+            <pre id="c-node">node -v</pre>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Get a Meta Muse API key</h3>
+          <p>The key is the only required setting. Muse Image runs on the Meta Model API, so you register there, not with this project:</p>
+          <ol class="substeps">
+            <li>Go to <a href="https://dev.meta.ai">dev.meta.ai</a> and sign in to the Meta Model API dashboard.</li>
+            <li>Open <strong>API keys</strong>.</li>
+            <li>Click <strong>Create API key</strong> and copy it — this is the value you pass as <code>MUSE_API_KEY</code>.</li>
+          </ol>
+          <p class="aside">Meta's own docs call this variable <code>MODEL_API_KEY</code>; this server reads it as <code>MUSE_API_KEY</code>, and talks to <code>https://api.meta.ai/v1</code> with the model <code>muse-image-1.0</code> by default. Reference: <a href="https://dev.meta.ai/docs">Model API docs</a> · <a href="https://dev.meta.ai/docs/image-generation">Image generation</a></p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Register the server</h3>
+          <p><code>-y</code> matters — without it npx stops on an interactive prompt and the handshake never completes.</p>
+          <div class="cmd">
+            <div class="cmd-head"><span>CLAUDE CODE</span><button class="copy" type="button" data-target="c-add">Copy</button></div>
+            <pre id="c-add">claude mcp add muse-image --scope user \
+  --env MUSE_API_KEY=your-key \
+  -- npx -y muse-image-mcp</pre>
+          </div>
+          <p>For Claude Desktop or Cursor, write the config by hand instead:</p>
+          <div class="cmd">
+            <div class="cmd-head"><span>JSON</span><button class="copy" type="button" data-target="c-json">Copy</button></div>
+            <pre id="c-json">{
+  "mcpServers": {
+    "muse-image": {
+      "command": "npx",
+      "args": ["-y", "muse-image-mcp"],
+      "env": { "MUSE_API_KEY": "your-key" }
+    }
+  }
+}</pre>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Start a new session</h3>
+          <p>MCP servers load at session start. An existing session will not pick it up — this is the most common "I installed it but the tools aren't there".</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Confirm it connected</h3>
+          <p>You should see <code>muse-image: npx -y muse-image-mcp - Connected</code>, and three <code>mcp__muse-image__*</code> tools available.</p>
+          <div class="cmd">
+            <div class="cmd-head"><span>SHELL</span><button class="copy" type="button" data-target="c-list">Copy</button></div>
+            <pre id="c-list">claude mcp list</pre>
+          </div>
+        </div>
+      </li>
+    </ol>
+
+    <p class="provenance">
+      <strong>Where do the images go?</strong>
+      By default <code>&lt;cwd&gt;/generated-images</code>, where <code>cwd</code> is whatever directory your client launched the server from — in Claude Code, your project root. Set <code>MUSE_OUTPUT_DIR</code> to an absolute path if you want them somewhere fixed.
+    </p>
+  </div>
+</section>
+
+<!-- ===================== 價格 ===================== -->
+<section id="pricing">
+  <div class="wrap">
+    <p class="eyebrow">Pricing</p>
+    <h2>One number, and it's not ours</h2>
+
+    <div class="price-grid">
+      <div class="price-tag">
+        <div class="price-num">$0.01</div>
+        <span class="price-unit">per generated image, paid to Meta</span>
+      </div>
+      <ul class="price-points">
+        <li><strong>The server is free.</strong> MIT licensed, no account, no tier, no key of ours. You bring your own Meta Muse key and pay Meta directly.</li>
+        <li><strong>Quality doesn't change the price.</strong> <code>reasoning_strength: high</code> and <code>low</code> cost the same — high is simply slower.</li>
+        <li><strong>Every response tells you what it cost.</strong> The estimated cost is printed at the end of each tool result, so spend never hides in a long session.</li>
+        <li><strong>The full smoke test costs six cents.</strong> That's the real end-to-end suite against the live API — a useful sense of scale.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-row">
+    <div>MIT © Kevin Tsai · Not affiliated with Meta</div>
+    <div class="foot-links">
+      <a href="https://github.com/kevintsai1202/muse-image-mcp">GitHub</a>
+      <a href="https://www.npmjs.com/package/muse-image-mcp">npm</a>
+      <a href="https://github.com/kevintsai1202/muse-image-mcp/blob/main/README.zh-TW.md">繁體中文</a>
+      <a href="https://github.com/kevintsai1202/muse-image-mcp/blob/main/README.zh-CN.md">简体中文</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+// 複製指令：剝除為了排版加上的反斜線換行，讓貼上去就能直接執行
+document.querySelectorAll('.copy').forEach(function (btn) {
+  btn.addEventListener('click', async function () {
+    var pre = document.getElementById(btn.dataset.target);
+    if (!pre) return;
+    var text = pre.textContent.replace(/\\\n\s+/g, ' ');
+    var original = btn.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'Copied';
+    } catch (e) {
+      var range = document.createRange();
+      range.selectNodeContents(pre);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      btn.textContent = 'Press Ctrl+C';
+    }
+    setTimeout(function () { btn.textContent = original; }, 2000);
+  });
+});
+</script>
+</body>
+</html>

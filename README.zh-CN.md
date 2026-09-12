@@ -208,15 +208,47 @@ MUSE_EXTRA_PARAMS={"quality":"ultra"}
 | `previous_response_id` | 否 | 上一轮回传的 id；省略代表开新对话 |
 | `images` | 否 | 首轮参考图 |
 | `reasoning_strength` | 否 | 默认 `high` |
+| `size` | 否 | **长宽比**字符串如 `1024x1536` |
+| `output_format` | 否 | `png` / `webp` / `jpeg`。与另两个工具不同，省略时得到的是 **webp**——那是这个端点的默认值 |
 | `filename_prefix` | 否 | 默认 `muse-iter` |
 | `model` | 否 | 模型 ID，省略则用服务器设置的默认值 |
 | `extra_params` | 否 | 合并与保护规则同上 |
 
-注意此工具**没有** `n`、`size`、`output_format` 参数——`/v1/responses` 端点一次只回传一张图，且不接受输出格式参数（见下方实测结果，未指定时 Meta 端默认输出 webp）。
+此工具**没有** `n` 参数——`/v1/responses` 端点一轮只回传一张图。但它**支持** `size` 与 `output_format`，只是这两个参数要放在请求的 `tools` 项目内而非顶层，详见下方实测结果。
 
 回应**一定包含 `response_id`**。下一轮把它填进 `previous_response_id` 即可延续同一段对话。本 server 不保存任何对话状态，对话由 Meta 端保存。
 
 ## `/v1/responses` 实测结果
+
+### 请求端：每张图的设置要放在 `tools` 内
+
+`reasoning_strength`、`size`、`output_format` 在这个端点**不是顶层参数**，而属于 `image_generation` 这个工具项目。把 `reasoning_strength` 送在顶层不是「多送无害」，整个请求会被拒：
+
+```
+HTTP 400 — unknown parameter `reasoning_strength`
+```
+
+正确形状：
+
+```json
+{
+  "model": "muse-image-1.0",
+  "input": "now make the background deep navy",
+  "store": true,
+  "previous_response_id": "resp_abc123",
+  "tools": [
+    { "type": "image_generation", "reasoning_strength": "low", "size": "1024x1536", "output_format": "png" }
+  ]
+}
+```
+
+0.1.0 以前把 `reasoning_strength` 送在顶层，导致 `iterate_image` **每一次调用都失败**。`generate_image` 与 `edit_image` 不受影响——它们走 `/images/generations` 与 `/images/edits`，这些参数在那里本来就是合法的顶层参数。
+
+这同时修正了本文档先前的说法：`size` 与 `output_format` 在这里**确实支持**。指定 `output_format: "png"` 会拿到真正的 PNG（以 base64 文件头验证），而不是端点默认的 webp。真正不支持的只有 `n`——一轮就是一张。
+
+`scripts/probe-responses-api.mjs` 可对真实 API 重现以上全部，一个 case 验一个假设。
+
+### 回应端
 
 Meta 未公开 `/v1/responses` 的回应 schema，实现时是比照 OpenAI Responses 惯例的推测，之后以真实 API 调用验证。实际结构如下：
 

@@ -208,15 +208,47 @@ Every tool saves images locally and returns **absolute paths**, never the image 
 | `previous_response_id` | No | The id returned by the previous turn; omit to start a new conversation |
 | `images` | No | Reference images for the first turn |
 | `reasoning_strength` | No | Defaults to `high` |
+| `size` | No | **Aspect ratio** string such as `1024x1536` |
+| `output_format` | No | `png` / `webp` / `jpeg`. Unlike the other two tools, omitting it yields **webp** — that's Meta's default for this endpoint |
 | `filename_prefix` | No | Defaults to `muse-iter` |
 | `model` | No | Model ID; omit to use the server default |
 | `extra_params` | No | Same merge and protection rules as above |
 
-This tool deliberately has **no** `n`, `size`, or `output_format` parameters — the `/v1/responses` endpoint returns one image at a time and doesn't accept an output format parameter (see the findings below; when unspecified, Meta's default output is webp).
+This tool has **no** `n` parameter — the `/v1/responses` endpoint returns one image per turn. It does support `size` and `output_format`, but they travel inside the request's `tools` entry rather than at the top level; see the findings below.
 
 The response **always includes a `response_id`**. Pass it as `previous_response_id` on the next call to continue the same conversation. This server stores no conversation state; Meta does.
 
 ## Findings from `/v1/responses`
+
+### Request body: per-image settings live inside `tools`
+
+`reasoning_strength`, `size` and `output_format` are **not** top-level parameters on this endpoint — they belong to the `image_generation` tool entry. Sending `reasoning_strength` at the top level is not merely ignored; the API rejects the whole request:
+
+```
+HTTP 400 — unknown parameter `reasoning_strength`
+```
+
+The correct shape:
+
+```json
+{
+  "model": "muse-image-1.0",
+  "input": "now make the background deep navy",
+  "store": true,
+  "previous_response_id": "resp_abc123",
+  "tools": [
+    { "type": "image_generation", "reasoning_strength": "low", "size": "1024x1536", "output_format": "png" }
+  ]
+}
+```
+
+Versions up to 0.1.0 sent `reasoning_strength` at the top level, which made `iterate_image` fail on **every** call. `generate_image` and `edit_image` were never affected — they use `/images/generations` and `/images/edits`, where these are legitimate top-level parameters.
+
+This also corrects an earlier claim in this README: `size` and `output_format` *are* supported here. Specifying `output_format: "png"` returns a genuine PNG (verified by the base64 header) rather than the endpoint's webp default. Only `n` is genuinely unavailable — one image per turn.
+
+`scripts/probe-responses-api.mjs` reproduces all of this against the live API, one hypothesis per case.
+
+### Response shape
 
 Meta doesn't publish the response schema for `/v1/responses`. The original implementation was an educated guess modeled on OpenAI's Responses convention; it was later verified against real API calls. The actual structure:
 

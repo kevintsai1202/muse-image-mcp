@@ -41,6 +41,10 @@ export interface IterateParams extends ModelOverrides {
   previousResponseId?: string;
   imageUrls?: string[];
   reasoningStrength?: ReasoningStrength;
+  /** 長寬比字串如 "1024x1536"。與另兩個工具不同，此參數要放進 tools 的 image_generation 物件 */
+  size?: string;
+  /** 輸出格式。省略時 Meta 端預設輸出 webp */
+  outputFormat?: OutputFormat;
 }
 
 /** 對話式迭代結果。responseId 必須回傳給呼叫端以便續接下一輪。 */

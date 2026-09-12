@@ -211,6 +211,26 @@ describe("iterate_image handler", () => {
       expect.objectContaining({ previousResponseId: "resp_1" })
     );
   });
+
+  // 實測確認 /v1/responses 透過 tools 物件支援這兩個參數（見 scripts/probe-responses-api.mjs case 4），
+  // 因此 iterate_image 沒有理由比另外兩個工具少這兩個選項。
+  it("size 與 output_format 傳給 client", async () => {
+    const deps = makeDeps();
+    const tool = pick(createTools(deps), "iterate_image");
+
+    await tool.handler({ prompt: "x", size: "1024x1536", output_format: "png" } as never);
+
+    expect(deps.client.iterate).toHaveBeenCalledWith(
+      expect.objectContaining({ size: "1024x1536", outputFormat: "png" })
+    );
+  });
+
+  it("schema 含 size 與 output_format", () => {
+    const shape = pick(createTools(makeDeps()), "iterate_image").config.inputSchema;
+
+    expect(shape.size).toBeDefined();
+    expect(shape.output_format).toBeDefined();
+  });
 });
 
 describe("formatResult", () => {

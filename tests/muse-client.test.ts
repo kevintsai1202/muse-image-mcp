@@ -220,6 +220,64 @@ describe("MuseClient.iterate", () => {
     expect(body.previous_response_id).toBe("resp_1");
   });
 
+  // 2026-09-12 實測：/v1/responses 以 HTTP 400「unknown parameter `reasoning_strength`」
+  // 拒絕頂層的該參數，iterate_image 因此 100% 失敗。官方文件（dev.meta.ai/docs/image-generation）
+  // 與 scripts/probe-responses-api.mjs 的 case 1 vs case 3 都確認：這個參數必須包在
+  // tools[{ type: "image_generation" }] 內，放頂層不是「多送無害」而是直接被拒。
+  it("reasoning_strength 放在 tools 的 image_generation 物件內，不出現在 body 頂層", async () => {
+    const fetchImpl = fakeFetch(200, { id: "resp_1", output: [{ b64_json: "IMG" }] });
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.iterate({ prompt: "make it blue", reasoningStrength: "high" });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect("reasoning_strength" in body).toBe(false);
+    expect(body.tools).toEqual([{ type: "image_generation", reasoning_strength: "high" }]);
+  });
+
+  // scripts/probe-responses-api.mjs 的 case 4 實測：tools 內帶 size 與 output_format 會生效——
+  // 指定 output_format: "png" 時回傳的 base64 檔頭確實是 PNG，而非未指定時的預設 webp。
+  // README 原先記載「/v1/responses 一次只回一張且不接受輸出格式參數」，前半成立、後半是錯的。
+  it("size 與 output_format 一併送進 tools 的 image_generation 物件", async () => {
+    const fetchImpl = fakeFetch(200, { id: "resp_1", output: [{ b64_json: "IMG" }] });
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.iterate({
+      prompt: "make it blue",
+      reasoningStrength: "low",
+      size: "1024x1536",
+      outputFormat: "png"
+    });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.tools).toEqual([
+      { type: "image_generation", reasoning_strength: "low", size: "1024x1536", output_format: "png" }
+    ]);
+  });
+
+  // /v1/responses 的回應不含 output_format 欄位，只能靠請求端已知的值回報。
+  // 若仍落回 webp 預設，指定 png 時會存成 .webp 副檔名、內容卻是 PNG——
+  // 這是「檔案存得下去但格式標示是錯的」這種不會拋錯的壞法。
+  it("指定 outputFormat 時以該值回報，不落回 webp 預設", async () => {
+    const fetchImpl = fakeFetch(200, { id: "resp_1", output: [{ b64_json: "IMG" }] });
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    const { result } = await client.iterate({ prompt: "x", outputFormat: "png" });
+
+    expect(result.outputFormat).toBe("png");
+  });
+
+  // 未指定 size／output_format 時不應送出空欄位，否則 body 會出現 "size": null 之類的無效欄位
+  it("未指定 size 與 output_format 時 tools 內不帶這兩個鍵", async () => {
+    const fetchImpl = fakeFetch(200, { id: "resp_1", output: [{ b64_json: "IMG" }] });
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    await client.iterate({ prompt: "make it blue", reasoningStrength: "high" });
+
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(Object.keys(body.tools[0])).toEqual(["type", "reasoning_strength"]);
+  });
+
   it("從巢狀回應中取出 response id 與圖片", async () => {
     const client = new MuseClient(CONFIG, {
       fetchImpl: fakeFetch(200, {

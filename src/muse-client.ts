@@ -140,7 +140,22 @@ export class MuseClient {
         store: true,
         previous_response_id: params.previousResponseId
       },
-      named: { reasoning_strength: params.reasoningStrength },
+      // reasoning_strength／size／output_format 在 /v1/responses 不是頂層參數，
+      // 而是 image_generation 這個工具的設定，必須包在 tools 陣列內。
+      // 送在頂層會被回 HTTP 400 unknown parameter（非「多送無害」），iterate 因此全數失敗。
+      // 放在 named 而非 core，是為了讓 extra_params 仍能整個換掉 tools（例如開關 web search）。
+      // 值為 undefined 的欄位會在 JSON.stringify 時自動消失，因此未指定的參數
+      // 不會變成 "size": null 之類的無效欄位；compact() 只處理 body 頂層，管不到這層巢狀物件。
+      named: {
+        tools: [
+          {
+            type: "image_generation",
+            reasoning_strength: params.reasoningStrength,
+            size: params.size,
+            output_format: params.outputFormat
+          }
+        ]
+      },
       defaultExtra: this.config.extraParams,
       callExtra: params.extraParams
     });
@@ -155,8 +170,12 @@ export class MuseClient {
     }
 
     const responseId = typeof raw.id === "string" ? raw.id : "";
-    // 實測 /v1/responses 不會回傳 output_format 欄位；未帶 output_format 參數時 Meta 端預設輸出 webp，故以此為 fallback
-    const outputFormat = (typeof raw.output_format === "string" ? raw.output_format : "webp") as OutputFormat;
+    // 實測 /v1/responses 不會回傳 output_format 欄位，所以格式只能由請求端決定：
+    // 有指定就用指定值，沒指定時 Meta 端預設輸出 webp。
+    // 少了中間這段，指定 png 會存成 .webp 副檔名而內容是 PNG——不拋錯但檔案標示是錯的。
+    const outputFormat = (typeof raw.output_format === "string"
+      ? raw.output_format
+      : params.outputFormat ?? "webp") as OutputFormat;
 
     return {
       result: {

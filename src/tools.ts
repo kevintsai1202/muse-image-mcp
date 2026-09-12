@@ -253,6 +253,12 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           .describe("上一輪回傳的 response_id；省略代表開始一段新對話"),
         images: z.array(z.string().min(1)).optional().describe("首輪參考圖，本機路徑或 http(s) 網址"),
         reasoning_strength: z.enum(["high", "low"]).optional().describe("推理強度，預設 high"),
+        size: commonShape.size,
+        // 與另兩個工具不同：iterate 未指定格式時 Meta 端預設輸出 webp，不是 png
+        output_format: z
+          .enum(["png", "webp", "jpeg"])
+          .optional()
+          .describe("輸出格式，省略時 Meta 端預設輸出 webp"),
         ...overrideShape,
         filename_prefix: z.string().optional().describe("輸出檔名前綴，預設 muse-iter")
       }
@@ -263,6 +269,8 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
         previous_response_id?: string;
         images?: string[];
         reasoning_strength?: ReasoningStrength;
+        size?: string;
+        output_format?: OutputFormat;
         filename_prefix?: string;
         model?: string;
         extra_params?: Record<string, unknown>;
@@ -281,6 +289,8 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           previousResponseId: input.previous_response_id,
           imageUrls,
           reasoningStrength: input.reasoning_strength ?? "high",
+          size: input.size,
+          outputFormat: input.output_format,
           model: input.model,
           extraParams: input.extra_params
         });

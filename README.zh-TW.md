@@ -210,17 +210,49 @@ MUSE_EXTRA_PARAMS={"quality":"ultra"}
 | `previous_response_id` | 否 | 上一輪回傳的 id；省略代表開新對話 |
 | `images` | 否 | 首輪參考圖 |
 | `reasoning_strength` | 否 | 預設 `high` |
+| `size` | 否 | **長寬比**字串如 `1024x1536` |
+| `output_format` | 否 | `png` / `webp` / `jpeg`。與另兩個工具不同，省略時得到的是 **webp**——那是這個端點的預設 |
 | `filename_prefix` | 否 | 預設 `muse-iter` |
 | `model` | 否 | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
 | `extra_params` | 否 | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
 
-注意此工具**沒有** `n`、`size`、`output_format` 參數——`/v1/responses` 端點一次只回傳一張圖，且不接受輸出格式參數（見下方「`/v1/responses` 實測結果」，未指定時 Meta 端預設輸出 webp）。
+此工具**沒有** `n` 參數——`/v1/responses` 端點一輪只回傳一張圖。但它**支援** `size` 與 `output_format`，只是這兩個參數要放在請求的 `tools` 項目內而非頂層，詳見下方實測結果。
 
 回應**一定包含 `response_id`**。下一輪把它填進 `previous_response_id` 即可延續同一段對話。本 server 不保存任何對話狀態，對話由 Meta 端保存。
 
 ## `/v1/responses` 實測結果
 
-Meta 未公開 `/v1/responses` 的回應 schema，Task 3 實作時是比照 OpenAI Responses 慣例的推測。Task 6 以真實 API 呼叫（`iterate_image`）驗證後，實際結構如下：
+### 請求端：每張圖的設定要放在 `tools` 內
+
+`reasoning_strength`、`size`、`output_format` 在這個端點**不是頂層參數**，而屬於 `image_generation` 這個工具項目。把 `reasoning_strength` 送在頂層不是「多送無害」，整個請求會被拒：
+
+```
+HTTP 400 — unknown parameter `reasoning_strength`
+```
+
+正確形狀：
+
+```json
+{
+  "model": "muse-image-1.0",
+  "input": "now make the background deep navy",
+  "store": true,
+  "previous_response_id": "resp_abc123",
+  "tools": [
+    { "type": "image_generation", "reasoning_strength": "low", "size": "1024x1536", "output_format": "png" }
+  ]
+}
+```
+
+0.1.0 以前把 `reasoning_strength` 送在頂層，導致 `iterate_image` **每一次呼叫都失敗**。`generate_image` 與 `edit_image` 不受影響——它們走 `/images/generations` 與 `/images/edits`，這些參數在那裡本來就是合法的頂層參數。
+
+這同時修正了本文件先前的說法：`size` 與 `output_format` 在這裡**確實支援**。指定 `output_format: "png"` 會拿到真正的 PNG（以 base64 檔頭驗證），而不是端點預設的 webp。真正不支援的只有 `n`——一輪就是一張。
+
+`scripts/probe-responses-api.mjs` 可對真實 API 重現以上全部，一個 case 驗一個假設。
+
+### 回應端
+
+Meta 未公開 `/v1/responses` 的回應 schema，實作時是比照 OpenAI Responses 慣例的推測。Task 6 以真實 API 呼叫（`iterate_image`）驗證後，實際結構如下：
 
 ```json
 {

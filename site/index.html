@@ -51,7 +51,9 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 
-img{ max-width:100%; display:block; }
+/* height:auto 不可省：每個 img 都帶 width／height 屬性（避免 lazy load 造成位移），
+   少了它，寬度被縮放後高度仍吃 HTML 屬性的原始像素值，圖會被拉長。 */
+img{ max-width:100%; height:auto; display:block; }
 a{ color:var(--cyan); text-underline-offset:3px; }
 a:focus-visible,button:focus-visible{ outline:2px solid var(--cyan); outline-offset:3px; border-radius:4px; }
 

@@ -273,6 +273,34 @@ figcaption q{ color:var(--text); font-style:italic; }
 .substeps strong{ color:var(--text); font-weight:600; }
 .aside{ font-size:.86rem !important; color:var(--muted); border-left:1px solid var(--line); padding-left:12px; }
 
+/* 綁定付款方式是讀者最容易卡住的一步，從一般說明裡拉出來單獨標示。
+   刻意不宣告 display，以免蓋掉語系規則的隱藏（見上面 .when 的註解）。 */
+.billing-note{
+  margin:12px 0; padding:11px 14px;
+  border-left:3px solid var(--amber);
+  background:rgba(240,169,63,.07);
+  border-radius:0 8px 8px 0;
+  font-size:.9rem; color:var(--muted);
+}
+.billing-note strong{ color:var(--text); font-weight:600; }
+
+/* ---------- 資訊圖表示範 ----------
+   左欄是做法（兩個步驟），右欄是成品，並排才看得出「輸入 → 輸出」的對應。
+   容器本身不帶 data-lang，所以這裡的 display:grid 不會撞到語系規則。 */
+.infographic-grid{
+  display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.92fr);
+  gap:30px; align-items:start;
+}
+@media (max-width:820px){ .infographic-grid{ grid-template-columns:1fr; } }
+.infographic-grid figure img{ width:100%; border-radius:var(--radius); border:1px solid var(--line); }
+.said-mini{
+  font-family:'IBM Plex Mono',monospace; font-size:.8rem; line-height:1.65;
+  background:var(--code-bg); border:1px solid var(--line);
+  border-radius:8px; padding:10px 12px; color:#D8E6EE;
+  margin:0 0 10px;
+}
+.said-mini b{ color:var(--amber); font-weight:500; }
+
 /* ---------- 價格 ---------- */
 .price-grid{ display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:34px; align-items:center; }
 @media (max-width:720px){ .price-grid{ grid-template-columns:1fr; gap:24px; } }
@@ -640,6 +668,69 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
   </div>
 </section>
 
+<!-- ===================== 資訊圖表示範 ===================== -->
+<section id="infographic">
+  <div class="wrap">
+    <p class="eyebrow"><span data-lang="en">A worked example</span><span data-lang="zh">一個完整例子</span></p>
+    <h2 data-lang="en">Turn an explanation into a diagram</h2>
+    <h2 data-lang="zh">把一段說明變成一張圖解</h2>
+    <p class="section-lede" data-lang="en">Two steps, both inside the same conversation: let Claude Code write the explanation first, then have it draw the result. The diagram on the right was made exactly this way.</p>
+    <p class="section-lede" data-lang="zh">兩個步驟，都在同一段對話裡完成：先讓 Claude Code 把說明寫清楚，再請它畫出來。右邊那張圖就是這樣做出來的。</p>
+
+    <div class="infographic-grid">
+      <div>
+        <ol class="steps">
+          <li>
+            <div>
+              <h3 data-lang="en">Ask for the explanation</h3>
+              <h3 data-lang="zh">先要一份說明</h3>
+              <p data-lang="en">Claude Code already knows the registration flow from this project's README, so it writes the steps rather than inventing them.</p>
+              <p data-lang="zh">Claude Code 已經從這個專案的 README 讀過註冊流程，所以它是照著寫，而不是自己編。</p>
+              <p class="said-mini" data-lang="en"><b>you</b> — Summarise how to get a Muse API key as four numbered steps, one line each.</p>
+              <p class="said-mini" data-lang="zh"><b>你</b> — 把申請 Muse API key 的流程整理成四個步驟，每步一行。</p>
+            </div>
+          </li>
+          <li>
+            <div>
+              <h3 data-lang="en">Ask for the diagram</h3>
+              <h3 data-lang="zh">再要一張圖</h3>
+              <p data-lang="en">Name a visual style and the agent turns those steps into a prompt for you. Here the ask was for the look of an old popular-science encyclopedia.</p>
+              <p data-lang="zh">指定一種視覺風格，Agent 會把剛才那些步驟轉成 prompt。這裡要的是舊科普讀物那種插畫感。</p>
+              <p class="said-mini" data-lang="en"><b>you</b> — Now draw those four steps as one diagram, in the style of an old popular-science encyclopedia.</p>
+              <p class="said-mini" data-lang="zh"><b>你</b> — 把這四個步驟畫成一張圖解，用《十萬個為什麼》那種老科普讀物的插畫風格。</p>
+              <div class="tool-call">generate_image({
+  prompt: "A vintage popular-science
+    encyclopedia illustration, a four-step
+    diagram ... numbered badges 1 2 3 4",
+  size: "1024x1024"
+})</div>
+            </div>
+          </li>
+        </ol>
+      </div>
+
+      <figure>
+        <img src="images/demo-infographic.webp" width="900" height="900" loading="lazy"
+             alt="A four-panel hand-drawn diagram on aged paper: a person at a desktop computer, a dashboard window showing a key, a hand holding a golden key, and a credit card next to a receipt, linked by arrows and marked with numbered badges one to four.">
+        <figcaption>
+          <span class="who">generate_image</span>
+          <span data-lang="en">One call, one image, US$0.01.</span>
+          <span data-lang="zh">一次呼叫、一張圖，US$0.01。</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="provenance" data-lang="en">
+      <strong>Why the panels carry no words.</strong>
+      Image models still render text unreliably, and a diagram with garbled labels is worse than one with none. So the prompt asks for numbered badges only and the wording stays on the page, where it is selectable, translatable and correct. Treat generated diagrams as the illustration, not as the document.
+    </p>
+    <p class="provenance" data-lang="zh">
+      <strong>為什麼圖裡沒有文字。</strong>
+      生圖模型畫文字仍然不可靠，而標籤糊掉的圖解比沒有標籤更糟。所以 prompt 只要求圓形數字徽章，文字留在網頁上——可以選取、可以翻譯，而且不會寫錯。生成的圖解請當作插圖，而不是文件本身。
+    </p>
+  </div>
+</section>
+
 <!-- ===================== 安裝 ===================== -->
 <section id="install">
   <div class="wrap">
@@ -673,11 +764,19 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
             <li>Open <strong>API keys</strong>.</li>
             <li>Click <strong>Create API key</strong> and copy it — this is the value you pass as <code>MUSE_API_KEY</code>.</li>
           </ol>
+          <p class="billing-note" data-lang="en">
+            <strong>A card comes first.</strong>
+            Meta wants a payment method on file before it will issue a key. After that, charges land on whichever arrives first — your balance reaching <strong>US$600</strong>, or the monthly close. Meta doesn't publish this in its public docs, so treat the figure as a guide and check the threshold shown in your own console.
+          </p>
           <ol class="substeps" data-lang="zh">
             <li>前往 <a href="https://dev.meta.ai">dev.meta.ai</a>，登入 Meta Model API 後台。</li>
             <li>開啟 <strong>API keys</strong>。</li>
             <li>點 <strong>Create API key</strong> 並複製產生的金鑰——這就是要填進 <code>MUSE_API_KEY</code> 的值。</li>
           </ol>
+          <p class="billing-note" data-lang="zh">
+            <strong>要先綁信用卡。</strong>
+            Meta 要求先綁定付款方式才會發給你金鑰。之後的結帳是「累積到 <strong>US$600</strong>」或「每月結一次」，以先到者為準。Meta 並未把這個數字寫在公開文件裡，所以請當作參考值，實際門檻以你自己後台顯示的為準。
+          </p>
           <p class="aside" data-lang="en">Meta's own docs call this variable <code>MODEL_API_KEY</code>; this server reads it as <code>MUSE_API_KEY</code>, and talks to <code>https://api.meta.ai/v1</code> with the model <code>muse-image-1.0</code> by default. Reference: <a href="https://dev.meta.ai/docs">Model API docs</a> · <a href="https://dev.meta.ai/docs/image-generation">Image generation</a></p>
           <p class="aside" data-lang="zh">Meta 官方文件把這個變數叫 <code>MODEL_API_KEY</code>；本 server 讀的名稱是 <code>MUSE_API_KEY</code>，連線到 <code>https://api.meta.ai/v1</code>，預設模型為 <code>muse-image-1.0</code>。參考：<a href="https://dev.meta.ai/docs">Model API 文件</a> · <a href="https://dev.meta.ai/docs/image-generation">影像生成</a></p>
         </div>
@@ -757,13 +856,13 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
         <span class="price-unit" data-lang="zh">每張生成的圖，付給 Meta</span>
       </div>
       <ul class="price-points" data-lang="en">
-        <li><strong>The server is free.</strong> MIT licensed, no account, no tier, no key of ours. You bring your own Meta Muse key and pay Meta directly.</li>
+        <li><strong>The MCP server is free.</strong> MIT licensed, no account and no tier on our side. What you do need is a Meta API key — and Meta asks for a payment method before it will issue one.</li>
         <li><strong>Quality doesn't change the price.</strong> <code>reasoning_strength: high</code> and <code>low</code> cost the same — high is simply slower.</li>
         <li><strong>Every response tells you what it cost.</strong> The estimated cost is printed at the end of each tool result, so spend never hides in a long session.</li>
         <li><strong>The full smoke test costs six cents.</strong> That's the real end-to-end suite against the live API — a useful sense of scale.</li>
       </ul>
       <ul class="price-points" data-lang="zh">
-        <li><strong>這個 server 免費。</strong>MIT 授權，不用註冊、沒有方案分級、也不經手我們的金鑰。你自備 Meta Muse 金鑰，直接付給 Meta。</li>
+        <li><strong>MCP Server 本身免費。</strong>MIT 授權，不必向我們註冊、沒有方案分級。你需要的是一組 Meta 的 API Key，而 Meta 那邊要先綁定付款方式才會發給你。</li>
         <li><strong>畫質不影響價格。</strong><code>reasoning_strength</code> 的 <code>high</code> 與 <code>low</code> 同價，差別只在 high 比較慢。</li>
         <li><strong>每次回應都告訴你花了多少。</strong>預估成本印在每次工具結果的末端，開銷不會在長對話裡默默累積。</li>
         <li><strong>跑完整套煙霧測試是六分錢。</strong>那是真的打線上 API 的端到端測試，可以拿來抓規模感。</li>

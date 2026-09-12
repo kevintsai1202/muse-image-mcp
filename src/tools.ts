@@ -41,6 +41,18 @@ const commonShape = {
   reasoning_strength: z.enum(["high", "low"]).optional().describe("推理強度，預設 high（品質較佳但較慢）")
 };
 
+/** 三個工具共用的模型與擴充參數覆寫 schema 片段 */
+const overrideShape = {
+  model: z.string().optional().describe("模型 ID，省略則使用伺服器設定的預設模型"),
+  extra_params: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      "傳給 API 的額外參數（物件），用於新模型的特殊參數。會與伺服器全域設定合併，單次設定優先。" +
+        "與請求核心欄位（model、prompt、response_format 等）衝突的 key 會被忽略並在回應中提示。"
+    )
+};
+
 /**
  * 組出工具回應文字。
  * 只回傳路徑不回傳圖片本體，避免 base64 佔用大量 context token。
@@ -61,6 +73,18 @@ export function formatResult(paths: string[], usage?: MuseUsage, extraLines: str
   lines.push(...extraLines);
 
   return lines.join("\n");
+}
+
+/**
+ * 把被忽略的擴充參數 key 組成警告行。
+ * 只警告不拋錯——參數被忽略屬於「結果仍可用但使用者應當知情」的等級，
+ * 拋錯會讓 Agent 進入重試迴圈反而干擾使用。
+ * @param blockedKeys 被核心欄位擋下的 key
+ * @returns 要附加到回應末端的文字行；沒有衝突時為空陣列
+ */
+export function blockedWarning(blockedKeys: string[]): string[] {
+  if (blockedKeys.length === 0) return [];
+  return [`⚠️ 下列 extra_params 與請求核心欄位衝突，已忽略：${blockedKeys.join(", ")}`];
 }
 
 /** 把任意例外轉成給 Agent 看的錯誤回應。絕不外拋，否則 Agent 只會看到通用失敗訊息。 */
@@ -88,6 +112,7 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
       inputSchema: {
         prompt: z.string().min(1).describe("圖片描述，英文通常效果較佳"),
         ...commonShape,
+        ...overrideShape,
         filename_prefix: z.string().optional().describe("輸出檔名前綴，預設 muse")
       }
     },
@@ -99,21 +124,27 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
         output_format?: OutputFormat;
         reasoning_strength?: ReasoningStrength;
         filename_prefix?: string;
+        model?: string;
+        extra_params?: Record<string, unknown>;
       };
       try {
         const format = input.output_format ?? "png";
-        const response = await client.generate({
+        const { result: response, blockedKeys } = await client.generate({
           prompt: input.prompt,
           n: input.n ?? 1,
           size: input.size,
           outputFormat: format,
-          reasoningStrength: input.reasoning_strength ?? "high"
+          reasoningStrength: input.reasoning_strength ?? "high",
+          model: input.model,
+          extraParams: input.extra_params
         });
         const paths = await saveImages(
           response.data.map(item => item.b64_json),
           { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse", format }
         );
-        return { content: [{ type: "text", text: formatResult(paths, response.usage) }] };
+        return {
+          content: [{ type: "text", text: formatResult(paths, response.usage, blockedWarning(blockedKeys)) }]
+        };
       } catch (error) {
         return toErrorResult(error);
       }
@@ -136,6 +167,7 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           .min(1)
           .describe("參考圖片，可為本機檔案路徑（png/jpg/jpeg/webp/gif）或 http(s) 網址"),
         ...commonShape,
+        ...overrideShape,
         filename_prefix: z.string().optional().describe("輸出檔名前綴，預設 muse-edit")
       }
     },
@@ -148,6 +180,8 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
         output_format?: OutputFormat;
         reasoning_strength?: ReasoningStrength;
         filename_prefix?: string;
+        model?: string;
+        extra_params?: Record<string, unknown>;
       };
       try {
         const format = input.output_format ?? "png";
@@ -156,19 +190,23 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
         for (const item of input.images) {
           imageUrls.push(await toImageUrl(item));
         }
-        const response = await client.edit({
+        const { result: response, blockedKeys } = await client.edit({
           prompt: input.prompt,
           imageUrls,
           n: input.n ?? 1,
           size: input.size,
           outputFormat: format,
-          reasoningStrength: input.reasoning_strength ?? "high"
+          reasoningStrength: input.reasoning_strength ?? "high",
+          model: input.model,
+          extraParams: input.extra_params
         });
         const paths = await saveImages(
           response.data.map(item => item.b64_json),
           { outputDir: config.outputDir, prefix: input.filename_prefix ?? "muse-edit", format }
         );
-        return { content: [{ type: "text", text: formatResult(paths, response.usage) }] };
+        return {
+          content: [{ type: "text", text: formatResult(paths, response.usage, blockedWarning(blockedKeys)) }]
+        };
       } catch (error) {
         return toErrorResult(error);
       }
@@ -192,6 +230,7 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           .describe("上一輪回傳的 response_id；省略代表開始一段新對話"),
         images: z.array(z.string().min(1)).optional().describe("首輪參考圖，本機路徑或 http(s) 網址"),
         reasoning_strength: z.enum(["high", "low"]).optional().describe("推理強度，預設 high"),
+        ...overrideShape,
         filename_prefix: z.string().optional().describe("輸出檔名前綴，預設 muse-iter")
       }
     },
@@ -202,6 +241,8 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
         images?: string[];
         reasoning_strength?: ReasoningStrength;
         filename_prefix?: string;
+        model?: string;
+        extra_params?: Record<string, unknown>;
       };
       try {
         let imageUrls: string[] | undefined;
@@ -212,11 +253,13 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           }
         }
 
-        const result = await client.iterate({
+        const { result, blockedKeys } = await client.iterate({
           prompt: input.prompt,
           previousResponseId: input.previous_response_id,
           imageUrls,
-          reasoningStrength: input.reasoning_strength ?? "high"
+          reasoningStrength: input.reasoning_strength ?? "high",
+          model: input.model,
+          extraParams: input.extra_params
         });
 
         const paths = await saveImages(result.images, {
@@ -225,7 +268,10 @@ export function createTools(deps: ToolDeps): ToolDefinition[] {
           format: result.outputFormat
         });
 
-        const extra = [`response_id: ${result.responseId}（下一輪修改請把它填入 previous_response_id）`];
+        const extra = [
+          `response_id: ${result.responseId}（下一輪修改請把它填入 previous_response_id）`,
+          ...blockedWarning(blockedKeys)
+        ];
         return { content: [{ type: "text", text: formatResult(paths, result.usage, extra) }] };
       } catch (error) {
         return toErrorResult(error);

@@ -18,21 +18,30 @@ function makeDeps(overrides: Partial<Parameters<typeof createTools>[0]> = {}) {
     config: CONFIG,
     client: {
       generate: vi.fn(async () => ({
-        created: 1,
-        data: [{ b64_json: "AAAA" }],
-        output_format: "png" as const,
-        usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 }
+        result: {
+          created: 1,
+          data: [{ b64_json: "AAAA" }],
+          output_format: "png" as const,
+          usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 }
+        },
+        blockedKeys: [] as string[]
       })),
       edit: vi.fn(async () => ({
-        created: 1,
-        data: [{ b64_json: "BBBB" }],
-        output_format: "png" as const
+        result: {
+          created: 1,
+          data: [{ b64_json: "BBBB" }],
+          output_format: "png" as const
+        },
+        blockedKeys: [] as string[]
       })),
       iterate: vi.fn(async () => ({
-        responseId: "resp_42",
-        images: ["CCCC"],
-        outputFormat: "png" as const,
-        usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 }
+        result: {
+          responseId: "resp_42",
+          images: ["CCCC"],
+          outputFormat: "png" as const,
+          usage: { input_tokens: 1, output_tokens: 2, total_tokens: 3 }
+        },
+        blockedKeys: [] as string[]
       }))
     },
     saveImages: vi.fn(async (list: string[]) => list.map((_, i) => `/out/img-${i + 1}.png`)),
@@ -219,5 +228,125 @@ describe("formatResult", () => {
 
   it("額外行會附加在最後", () => {
     expect(formatResult(["/a.png"], undefined, ["response_id: r1"])).toContain("response_id: r1");
+  });
+});
+
+describe("模型與擴充參數", () => {
+  it("generate_image 的 schema 含 model 與 extra_params", () => {
+    const tools = createTools(makeDeps());
+    const shape = pick(tools, "generate_image").config.inputSchema;
+    expect(shape.model).toBeDefined();
+    expect(shape.extra_params).toBeDefined();
+  });
+
+  it("edit_image 的 schema 含 model 與 extra_params", () => {
+    const tools = createTools(makeDeps());
+    const shape = pick(tools, "edit_image").config.inputSchema;
+    expect(shape.model).toBeDefined();
+    expect(shape.extra_params).toBeDefined();
+  });
+
+  it("iterate_image 的 schema 含 model 與 extra_params", () => {
+    const tools = createTools(makeDeps());
+    const shape = pick(tools, "iterate_image").config.inputSchema;
+    expect(shape.model).toBeDefined();
+    expect(shape.extra_params).toBeDefined();
+  });
+
+  it("generate_image 把 model 與 extra_params 透傳給 client", async () => {
+    const deps = makeDeps();
+    const tools = createTools(deps);
+    await pick(tools, "generate_image").handler({
+      prompt: "p",
+      model: "muse-image-9.9",
+      extra_params: { quality: "ultra" }
+    } as never);
+
+    expect(deps.client.generate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "muse-image-9.9", extraParams: { quality: "ultra" } })
+    );
+  });
+
+  it("edit_image 把 model 與 extra_params 透傳給 client", async () => {
+    const deps = makeDeps();
+    const tools = createTools(deps);
+    await pick(tools, "edit_image").handler({
+      prompt: "p",
+      images: ["http://example.test/a.png"],
+      model: "muse-image-9.9",
+      extra_params: { quality: "ultra" }
+    } as never);
+
+    expect(deps.client.edit).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "muse-image-9.9", extraParams: { quality: "ultra" } })
+    );
+  });
+
+  it("iterate_image 把 model 與 extra_params 透傳給 client", async () => {
+    const deps = makeDeps();
+    const tools = createTools(deps);
+    await pick(tools, "iterate_image").handler({
+      prompt: "p",
+      model: "muse-image-9.9",
+      extra_params: { quality: "ultra" }
+    } as never);
+
+    expect(deps.client.iterate).toHaveBeenCalledWith(
+      expect.objectContaining({ model: "muse-image-9.9", extraParams: { quality: "ultra" } })
+    );
+  });
+
+  it("blockedKeys 非空時在回應文字附加警告行", async () => {
+    const deps = makeDeps({
+      client: {
+        generate: vi.fn(async () => ({
+          result: { created: 1, data: [{ b64_json: "AAAA" }], output_format: "png" as const },
+          blockedKeys: ["model", "prompt"]
+        })),
+        edit: vi.fn(async () => ({
+          result: { created: 1, data: [{ b64_json: "BBBB" }], output_format: "png" as const },
+          blockedKeys: [] as string[]
+        })),
+        iterate: vi.fn(async () => ({
+          result: { responseId: "r", images: ["CCCC"], outputFormat: "png" as const },
+          blockedKeys: [] as string[]
+        }))
+      }
+    });
+    const tools = createTools(deps);
+    const result = await pick(tools, "generate_image").handler({ prompt: "p" } as never);
+
+    expect(result.content[0]!.text).toContain("已忽略：model, prompt");
+  });
+
+  it("blockedKeys 為空時不附加警告行", async () => {
+    const tools = createTools(makeDeps());
+    const result = await pick(tools, "generate_image").handler({ prompt: "p" } as never);
+
+    expect(result.content[0]!.text).not.toContain("已忽略");
+  });
+
+  it("iterate_image 的警告與 response_id 提示可並存", async () => {
+    const deps = makeDeps({
+      client: {
+        generate: vi.fn(async () => ({
+          result: { created: 1, data: [{ b64_json: "AAAA" }], output_format: "png" as const },
+          blockedKeys: [] as string[]
+        })),
+        edit: vi.fn(async () => ({
+          result: { created: 1, data: [{ b64_json: "BBBB" }], output_format: "png" as const },
+          blockedKeys: [] as string[]
+        })),
+        iterate: vi.fn(async () => ({
+          result: { responseId: "resp_42", images: ["CCCC"], outputFormat: "png" as const },
+          blockedKeys: ["store"]
+        }))
+      }
+    });
+    const tools = createTools(deps);
+    const result = await pick(tools, "iterate_image").handler({ prompt: "p" } as never);
+
+    expect(result.content[0]!.text).toContain("response_id: resp_42");
+    expect(result.content[0]!.text).toContain("已忽略：store");
   });
 });

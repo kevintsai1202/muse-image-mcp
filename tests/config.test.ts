@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { loadConfig, loadDotEnvFile, PACKAGE_ROOT } from "../src/config.js";
+import { envCandidatePaths, loadConfig, loadDotEnvFile, PACKAGE_ROOT } from "../src/config.js";
 import { MuseError } from "../src/errors.js";
 
 /** 測試中被寫進 process.env 的變數，結束後要清掉避免污染其他測試 */
@@ -13,12 +13,13 @@ afterEach(() => {
 });
 
 describe("loadDotEnvFile", () => {
-  it("能把 .env 的內容載入 process.env", async () => {
+  it("能把 .env 的內容載入 process.env，並回傳實際載入的路徑", async () => {
     const dir = await mkdtemp(join(tmpdir(), "muse-dotenv-"));
     try {
-      await writeFile(join(dir, ".env"), "DOTENV_PROBE_A=from_file\n", "utf8");
+      const envPath = join(dir, ".env");
+      await writeFile(envPath, "DOTENV_PROBE_A=from_file\n", "utf8");
 
-      expect(loadDotEnvFile(join(dir, ".env"))).toBe(true);
+      expect(loadDotEnvFile([envPath])).toBe(envPath);
       expect(process.env.DOTENV_PROBE_A).toBe("from_file");
     } finally {
       await rm(dir, { recursive: true, force: true });
@@ -31,7 +32,7 @@ describe("loadDotEnvFile", () => {
       process.env.DOTENV_PROBE_B = "from_shell";
       await writeFile(join(dir, ".env"), "DOTENV_PROBE_B=from_file\n", "utf8");
 
-      loadDotEnvFile(join(dir, ".env"));
+      loadDotEnvFile([join(dir, ".env")]);
 
       expect(process.env.DOTENV_PROBE_B).toBe("from_shell");
     } finally {
@@ -39,8 +40,30 @@ describe("loadDotEnvFile", () => {
     }
   });
 
-  it("檔案不存在時回傳 false 且不拋錯", () => {
-    expect(loadDotEnvFile(join(tmpdir(), "definitely-not-here", ".env"))).toBe(false);
+  it("全部候選路徑都不存在時回傳 null 且不拋錯", () => {
+    expect(loadDotEnvFile([join(tmpdir(), "definitely-not-here", ".env")])).toBe(null);
+  });
+
+  it("依序搜尋候選路徑，採用第一個存在者", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "muse-dotenv-"));
+    try {
+      const second = join(dir, "second.env");
+      await writeFile(second, "DOTENV_PROBE_A=from_second\n", "utf8");
+
+      const missing = join(dir, "missing.env");
+      expect(loadDotEnvFile([missing, second])).toBe(second);
+      expect(process.env.DOTENV_PROBE_A).toBe("from_second");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("候選路徑預設為套件根目錄與家目錄，且順序為套件根優先", () => {
+    const candidates = envCandidatePaths();
+    expect(candidates).toEqual([
+      resolve(PACKAGE_ROOT, ".env"),
+      resolve(homedir(), ".muse-image-mcp", ".env")
+    ]);
   });
 
   it("PACKAGE_ROOT 指向專案根目錄（該處有 package.json）", async () => {
@@ -58,6 +81,18 @@ describe("loadConfig", () => {
       expect(err).toBeInstanceOf(MuseError);
       expect((err as MuseError).kind).toBe("config");
       expect((err as MuseError).message).toContain("MUSE_API_KEY");
+    }
+  });
+
+  it("缺少 MUSE_API_KEY 的錯誤訊息會列出完整的 .env 搜尋鏈", () => {
+    try {
+      loadConfig({});
+      throw new Error("預期應該拋錯但沒有");
+    } catch (err) {
+      const message = (err as MuseError).message;
+      for (const candidate of envCandidatePaths()) {
+        expect(message).toContain(candidate);
+      }
     }
   });
 
@@ -85,14 +120,14 @@ describe("loadConfig", () => {
     expect(config.outputDir).toBe(resolve(process.cwd(), "out/images"));
   });
 
-  it("MUSE_OUTPUT_DIR 為空字串時視同未設定，使用預設值 muse-output", () => {
+  it("MUSE_OUTPUT_DIR 為空字串時視同未設定，使用預設值 generated-images", () => {
     const config = loadConfig({ MUSE_API_KEY: "k", MUSE_OUTPUT_DIR: "" });
-    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
+    expect(config.outputDir).toBe(resolve(process.cwd(), "generated-images"));
   });
 
-  it("MUSE_OUTPUT_DIR 為全空白字串時視同未設定，使用預設值 muse-output", () => {
+  it("MUSE_OUTPUT_DIR 為全空白字串時視同未設定，使用預設值 generated-images", () => {
     const config = loadConfig({ MUSE_API_KEY: "k", MUSE_OUTPUT_DIR: "   " });
-    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
+    expect(config.outputDir).toBe(resolve(process.cwd(), "generated-images"));
   });
 
   it("逾時可覆寫", () => {
@@ -160,7 +195,7 @@ describe("loadConfig", () => {
     const config = loadConfig({ MUSE_API_KEY: "test-key" });
     expect(config.apiKey).toBe("test-key");
     expect(config.baseUrl).toBe("https://api.meta.ai/v1");
-    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
+    expect(config.outputDir).toBe(resolve(process.cwd(), "generated-images"));
     expect(config.timeoutMs).toBe(120_000);
     expect(config.model).toBe("muse-image-1.0");
     expect(config.extraParams).toEqual({});

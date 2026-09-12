@@ -12,8 +12,8 @@ import { createTools } from "./tools.js";
  * 注意：stdout 是 JSON-RPC 通道，所有日誌一律走 stderr。
  */
 async function main(): Promise<void> {
-  // 先載入套件根目錄的 .env；已存在的環境變數優先，故 MCP 設定的 env 不會被蓋掉
-  const dotEnvLoaded = loadDotEnvFile();
+  // 依序搜尋套件根與家目錄的 .env；已存在的環境變數優先，故 MCP 設定的 env 不會被蓋掉
+  const dotEnvPath = loadDotEnvFile();
   const config = loadConfig();
   const client = new MuseClient(config);
   const tools = createTools({ client, config, saveImages, toImageUrl });
@@ -26,8 +26,8 @@ async function main(): Promise<void> {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `muse-image MCP server 已啟動（輸出目錄：${config.outputDir}；` +
-      `.env：${dotEnvLoaded ? "已載入" : "未使用"}）`
+    `muse-image MCP server 已啟動（模型：${config.model}；輸出目錄：${config.outputDir}；` +
+      `.env：${dotEnvPath ?? "未使用"}）`
   );
 }
 

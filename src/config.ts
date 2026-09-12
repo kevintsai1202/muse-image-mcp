@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { MuseError } from "./errors.js";
@@ -10,20 +11,32 @@ import { MuseError } from "./errors.js";
 export const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
- * 載入 .env 檔到 process.env。
+ * 取得 .env 的候選路徑，依搜尋優先序排列。
+ * 套件根優先是為了讓本機 clone 的既有用法不受影響；家目錄是經 npx 安裝時
+ * 使用者唯一可控的固定位置——npx 執行時套件根位於 npm 快取目錄，帶雜湊且會被清除。
+ */
+export function envCandidatePaths(): string[] {
+  return [resolve(PACKAGE_ROOT, ".env"), resolve(homedir(), ".muse-image-mcp", ".env")];
+}
+
+/**
+ * 依序嘗試候選路徑，載入第一個存在的 .env 到 process.env。
  * 使用 Node 內建的 process.loadEnvFile（Node >= 20.12），不引入 dotenv 套件。
  * 已存在的環境變數不會被覆寫，因此 MCP client 傳入的 env 永遠優先於 .env。
- * @param envPath .env 檔路徑，預設為套件根目錄下的 .env
- * @returns 是否成功載入。檔案不存在或格式錯誤時回傳 false 而不拋錯——
+ * @param envPaths 候選路徑清單，預設為 envCandidatePaths()
+ * @returns 實際載入的路徑；全部都不存在或格式錯誤時回傳 null 而不拋錯——
  *          只用 MCP 設定的 env 區塊提供 key 也是合法用法，不該因為沒有 .env 就啟動失敗。
  */
-export function loadDotEnvFile(envPath: string = resolve(PACKAGE_ROOT, ".env")): boolean {
-  try {
-    process.loadEnvFile(envPath);
-    return true;
-  } catch {
-    return false;
+export function loadDotEnvFile(envPaths: string[] = envCandidatePaths()): string | null {
+  for (const envPath of envPaths) {
+    try {
+      process.loadEnvFile(envPath);
+      return envPath;
+    } catch {
+      // 這個候選不存在或讀不了，換下一個
+    }
   }
+  return null;
 }
 
 /** 執行期設定，來源為環境變數（含由 .env 載入者） */
@@ -43,7 +56,7 @@ export interface Config {
 }
 
 const DEFAULT_BASE_URL = "https://api.meta.ai/v1";
-const DEFAULT_OUTPUT_DIR = "muse-output";
+const DEFAULT_OUTPUT_DIR = "generated-images";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_MODEL = "muse-image-1.0";
 
@@ -57,8 +70,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (apiKey === "") {
     throw new MuseError(
       "config",
-      `缺少 MUSE_API_KEY。請擇一設定：(1) 在 ${PACKAGE_ROOT} 底下建立 .env 檔並寫入 MUSE_API_KEY=你的key，` +
-        "或 (2) 在 MCP server 設定的 env 區塊填入。API key 可於 https://dev.meta.ai 後台取得。"
+      `缺少 MUSE_API_KEY。請擇一設定：(1) 在下列任一位置建立 .env 檔並寫入 MUSE_API_KEY=你的key（依序採用第一個存在者）：` +
+        `${envCandidatePaths().join("、")}，或 (2) 在 MCP server 設定的 env 區塊填入。` +
+        "API key 可於 https://dev.meta.ai 後台取得。"
     );
   }
 
@@ -69,7 +83,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const baseUrl = (rawBaseUrl === "" ? DEFAULT_BASE_URL : rawBaseUrl).replace(/\/+$/, "");
 
   // 同理，空字串或全空白視同未設定 MUSE_OUTPUT_DIR，否則 resolve(cwd, "") 會解析成 cwd 本身，
-  // 圖片就會落在使用者專案根目錄而非 muse-output/ 子目錄
+  // 圖片就會落在使用者專案根目錄而非 generated-images/ 子目錄
   const rawOutputDir = (env.MUSE_OUTPUT_DIR ?? "").trim();
   const outputDir = resolve(process.cwd(), rawOutputDir === "" ? DEFAULT_OUTPUT_DIR : rawOutputDir);
 

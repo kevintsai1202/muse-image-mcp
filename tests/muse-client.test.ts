@@ -7,7 +7,9 @@ const CONFIG: Config = Object.freeze({
   apiKey: "test-key",
   baseUrl: "https://api.example.test/v1",
   outputDir: "/tmp/out",
-  timeoutMs: 1000
+  timeoutMs: 1000,
+  model: "muse-image-1.0",
+  extraParams: {}
 });
 
 /** 建立一個回傳指定 JSON 與狀態碼的 fetch 假物件 */

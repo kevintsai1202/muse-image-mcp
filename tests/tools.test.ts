@@ -7,7 +7,9 @@ const CONFIG: Config = Object.freeze({
   apiKey: "k",
   baseUrl: "https://api.example.test/v1",
   outputDir: "/out",
-  timeoutMs: 1000
+  timeoutMs: 1000,
+  model: "muse-image-1.0",
+  extraParams: {}
 });
 
 /** 組出一套可控的相依，預設全部成功 */

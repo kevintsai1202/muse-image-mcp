@@ -36,11 +36,16 @@ export interface Config {
   outputDir: string;
   /** 單次 HTTP 請求逾時毫秒數 */
   timeoutMs: number;
+  /** 全域預設模型 ID，可被工具的 model 參數單次覆寫 */
+  model: string;
+  /** 全域預設額外參數，與工具的 extra_params 合併後送給 API */
+  extraParams: Record<string, unknown>;
 }
 
 const DEFAULT_BASE_URL = "https://api.meta.ai/v1";
 const DEFAULT_OUTPUT_DIR = "muse-output";
 const DEFAULT_TIMEOUT_MS = 120_000;
+const DEFAULT_MODEL = "muse-image-1.0";
 
 /**
  * 從環境變數載入設定並驗證。
@@ -78,5 +83,31 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     timeoutMs = parsed;
   }
 
-  return Object.freeze({ apiKey, baseUrl, outputDir, timeoutMs });
+  // 空字串或全空白視同未設定，與 MUSE_BASE_URL、MUSE_OUTPUT_DIR 的處理一致
+  const rawModel = (env.MUSE_MODEL ?? "").trim();
+  const model = rawModel === "" ? DEFAULT_MODEL : rawModel;
+
+  // 額外參數採 fail fast：設定錯誤時寧可啟動失敗，也不要讓參數靜默消失造成極難追的問題
+  const rawExtraParams = (env.MUSE_EXTRA_PARAMS ?? "").trim();
+  let extraParams: Record<string, unknown> = {};
+  if (rawExtraParams !== "") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawExtraParams);
+    } catch {
+      throw new MuseError(
+        "config",
+        `MUSE_EXTRA_PARAMS 必須是合法的 JSON 物件字串，例如 {"quality":"ultra"}，目前為 "${rawExtraParams}"。`
+      );
+    }
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new MuseError(
+        "config",
+        `MUSE_EXTRA_PARAMS 必須是 JSON 物件，不能是陣列、數字、字串或 null，目前為 "${rawExtraParams}"。`
+      );
+    }
+    extraParams = parsed as Record<string, unknown>;
+  }
+
+  return Object.freeze({ apiKey, baseUrl, outputDir, timeoutMs, model, extraParams });
 }

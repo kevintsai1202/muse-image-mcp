@@ -107,9 +107,71 @@ describe("loadConfig", () => {
     expect(loadConfig({ MUSE_API_KEY: "k", MUSE_TIMEOUT_MS: "5000" }).timeoutMs).toBe(5000);
   });
 
+  it("未設定 MUSE_MODEL 時使用預設模型", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k" }).model).toBe("muse-image-1.0");
+  });
+
+  it("MUSE_MODEL 可覆寫預設模型", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k", MUSE_MODEL: "muse-image-2.0" }).model).toBe("muse-image-2.0");
+  });
+
+  it("MUSE_MODEL 為空字串時視同未設定，使用預設模型", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k", MUSE_MODEL: "" }).model).toBe("muse-image-1.0");
+  });
+
+  it("MUSE_MODEL 為全空白時視同未設定，使用預設模型", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k", MUSE_MODEL: "   " }).model).toBe("muse-image-1.0");
+  });
+
+  it("未設定 MUSE_EXTRA_PARAMS 時為空物件", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k" }).extraParams).toEqual({});
+  });
+
+  it("MUSE_EXTRA_PARAMS 可解析為物件", () => {
+    const config = loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: '{"quality":"ultra","seed":7}' });
+    expect(config.extraParams).toEqual({ quality: "ultra", seed: 7 });
+  });
+
+  it("MUSE_EXTRA_PARAMS 為空字串時視同未設定", () => {
+    expect(loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: "" }).extraParams).toEqual({});
+  });
+
+  it("MUSE_EXTRA_PARAMS 為非法 JSON 時拋出 config 類錯誤", () => {
+    try {
+      loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: "{not json" });
+      throw new Error("預期應該拋錯但沒有");
+    } catch (err) {
+      expect(err).toBeInstanceOf(MuseError);
+      expect((err as MuseError).kind).toBe("config");
+      expect((err as MuseError).message).toContain("MUSE_EXTRA_PARAMS");
+    }
+  });
+
+  it("MUSE_EXTRA_PARAMS 為 JSON 陣列時拋出 config 類錯誤", () => {
+    expect(() => loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: "[1,2]" })).toThrow(MuseError);
+  });
+
+  it("MUSE_EXTRA_PARAMS 為 JSON null 時拋出 config 類錯誤", () => {
+    expect(() => loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: "null" })).toThrow(MuseError);
+  });
+
+  it("MUSE_EXTRA_PARAMS 為 JSON 數字時拋出 config 類錯誤", () => {
+    expect(() => loadConfig({ MUSE_API_KEY: "k", MUSE_EXTRA_PARAMS: "42" })).toThrow(MuseError);
+  });
+
   it("逾時為非正整數時拋出 config 類錯誤", () => {
     expect(() => loadConfig({ MUSE_API_KEY: "k", MUSE_TIMEOUT_MS: "abc" })).toThrow(MuseError);
     expect(() => loadConfig({ MUSE_API_KEY: "k", MUSE_TIMEOUT_MS: "0" })).toThrow(MuseError);
+  });
+
+  it("只給 API key 時套用全部預設值", () => {
+    const config = loadConfig({ MUSE_API_KEY: "test-key" });
+    expect(config.apiKey).toBe("test-key");
+    expect(config.baseUrl).toBe("https://api.meta.ai/v1");
+    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
+    expect(config.timeoutMs).toBe(120_000);
+    expect(config.model).toBe("muse-image-1.0");
+    expect(config.extraParams).toEqual({});
   });
 
   it("回傳的設定物件為凍結狀態，避免被下游意外改動", () => {

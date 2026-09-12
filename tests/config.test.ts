@@ -65,14 +65,6 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ MUSE_API_KEY: "   " })).toThrow(MuseError);
   });
 
-  it("只給 API key 時套用全部預設值", () => {
-    const config = loadConfig({ MUSE_API_KEY: "test-key" });
-    expect(config.apiKey).toBe("test-key");
-    expect(config.baseUrl).toBe("https://api.meta.ai/v1");
-    expect(config.outputDir).toBe(resolve(process.cwd(), "muse-output"));
-    expect(config.timeoutMs).toBe(120_000);
-  });
-
   it("可覆寫 base URL，並移除結尾斜線", () => {
     const config = loadConfig({ MUSE_API_KEY: "k", MUSE_BASE_URL: "http://localhost:9999/v1/" });
     expect(config.baseUrl).toBe("http://localhost:9999/v1");

@@ -1,5 +1,9 @@
 # muse-image-mcp
 
+[![CI](https://github.com/kevintsai1202/muse-image-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/kevintsai1202/muse-image-mcp/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/muse-image-mcp)](https://www.npmjs.com/package/muse-image-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 以 Meta Muse 影像模型提供生圖能力的 MCP server。支援文字生圖、依圖改圖、以及對話式多輪迭代修圖。
 
 ## 需求

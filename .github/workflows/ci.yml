@@ -1,0 +1,45 @@
+# 持續整合：每次推送與 PR 都驗證建置、型別與測試。
+# 不執行 npm run smoke——煙霧測試會呼叫真實 Meta Muse API 並產生費用。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.12.0 是 package.json engines 宣告的下限（process.loadEnvFile 的最低版本），
+        # 24.x 是目前的開發版本；兩端都測才能確保宣告的相容範圍屬實
+        node-version: ["20.12.0", "24.x"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: 安裝相依（依 lockfile）
+        run: npm ci
+
+      - name: 建置
+        run: npm run build
+
+      - name: 型別檢查（含 tests/，涵蓋 e2e 檔）
+        run: npm run typecheck
+
+      - name: 單元測試
+        run: npm test
+
+      - name: 驗證打包內容
+        run: npm pack --dry-run

@@ -1,0 +1,74 @@
+# 發佈到 npm：推送 v* tag 時觸發。
+#
+# 使用 npm trusted publishing（OIDC），不需要任何 NPM_TOKEN——GitHub Actions 在執行時
+# 向 npm 出示由 GitHub 簽發、綁定「本 repo 的本 workflow」的短期憑證，npm 比對事先登記的
+# 設定才放行。因此沒有長期有效的秘密可外洩。
+#
+# 前置設定（一次性，需在 npmjs.com 完成，且該操作本身需要互動式 2FA）：
+#   套件頁 → Settings → Trusted Publisher，填入
+#     Organization or user : kevintsai1202
+#     Repository           : muse-image-mcp
+#     Workflow filename    : publish.yml   ← 必須與本檔名一致
+#
+# 發版步驟：
+#   1. 更新 package.json 的 version
+#   2. git commit -am "chore: release vX.Y.Z" && git push
+#   3. git tag vX.Y.Z && git push origin vX.Y.Z
+name: Publish
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  # OIDC 憑證的簽發需要此權限，這是 trusted publishing 的核心
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          # trusted publishing 需要 Node >= 22.14.0
+          node-version: "24.x"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - name: 確保 npm 版本支援 trusted publishing
+        # trusted publishing 需要 npm >= 11.5.1；Node 24 隨附的版本通常已足夠，
+        # 但 runner 映像的隨附版本會變動，明確升級以免發版當下才失敗
+        run: npm install -g npm@latest
+
+      - name: 安裝相依（依 lockfile）
+        run: npm ci
+
+      - name: 確認 tag 版本與 package.json 一致
+        # 版本不一致會發出錯版號，且 npm 上無法覆寫，故在發佈前擋下
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "tag 版本 ($TAG_VERSION) 與 package.json 版本 ($PKG_VERSION) 不一致，中止發佈"
+            exit 1
+          fi
+          echo "版本一致：$PKG_VERSION"
+
+      - name: 建置
+        run: npm run build
+
+      - name: 型別檢查
+        run: npm run typecheck
+
+      - name: 單元測試
+        # 不跑 npm run smoke——煙霧測試會呼叫真實 API 並產生費用
+        run: npm test
+
+      - name: 發佈到 npm
+        # 不需要 NODE_AUTH_TOKEN：憑證由 OIDC 提供
+        run: npm publish

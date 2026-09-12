@@ -30,19 +30,26 @@ const { MuseClient } = await import("../dist/muse-client.js");
 const { loadConfig } = await import("../dist/config.js");
 const { saveImages } = await import("../dist/image-store.js");
 
+// 上一版讓模型自由發揮標註文字，字一多就出現拼錯（AAFE LOCATION、CARDHOLLER），
+// 而 edit_image 實測改不動圖中既有文字（見 fix-infographic-typos.mjs）。
+// 這一版改為逐格指定確切字串並限制「只能用列出的字」，以字數換取拼字正確率。
 const PROMPT = [
-  "A richly detailed horizontal infographic poster in the style of a 1980s popular-science encyclopedia,",
-  "titled \"HOW TO GET AN API KEY\" in a bold banner across the top.",
-  "Four numbered panels arranged left to right, connected by arrows:",
-  "panel 1, a person at a desktop computer signing in, captioned \"SIGN IN\";",
-  "panel 2, a browser dashboard window with a key icon on screen, captioned \"OPEN API KEYS\";",
-  "panel 3, a hand holding up a golden key, captioned \"CREATE KEY\";",
-  "panel 4, a credit card beside a printed monthly invoice, captioned \"ADD PAYMENT\".",
-  "Each panel has a large circular numbered badge and small explanatory annotations",
-  "with thin leader lines pointing at details.",
+  "A richly detailed horizontal infographic poster in the style of a 1980s popular-science encyclopedia.",
+  "A bold banner across the top reads: HOW TO GET AN API KEY.",
+  "Below it, four panels left to right, joined by arrows, each with a large circular numbered badge.",
+  "Panel 1, badge 1, heading SIGN IN, showing a person at a desktop computer,",
+  "with one short annotation on a leader line reading: ENTER EMAIL AND PASSWORD.",
+  "Panel 2, badge 2, heading OPEN API KEYS, showing a browser dashboard window with a key icon,",
+  "with one short annotation reading: FIND THE API KEYS PAGE.",
+  "Panel 3, badge 3, heading CREATE KEY, showing a hand holding a golden key,",
+  "with one short annotation reading: COPY IT AND STORE IT SAFELY.",
+  "Panel 4, badge 4, heading ADD PAYMENT, showing a credit card beside a monthly invoice,",
+  "with one short annotation reading: BILLING IS USAGE BASED.",
+  "A narrow banner along the bottom reads: TREAT YOUR API KEY LIKE A PASSWORD.",
   "Rich gouache and watercolour textures on warm aged paper, detailed hand-drawn ink linework,",
   "cross-hatching and stippling, bright primary colours, a decorative ruled border.",
-  "All lettering in clean legible English capitals, correctly spelled."
+  "Use only the words listed above and no other text.",
+  "Every word must be spelled correctly, in clean legible hand-lettered English capitals."
 ].join(" ");
 
 const client = new MuseClient(loadConfig());

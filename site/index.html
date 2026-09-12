@@ -698,11 +698,12 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
               <p class="said-mini" data-lang="en"><b>you</b> — Now draw those four steps as one diagram, in the style of an old popular-science encyclopedia.</p>
               <p class="said-mini" data-lang="zh"><b>你</b> — 把這四個步驟畫成一張圖解，用《十萬個為什麼》那種老科普讀物的插畫風格。</p>
               <div class="tool-call">generate_image({
-  prompt: "A richly detailed horizontal
-    infographic poster, 1980s popular-science
-    encyclopedia style, four numbered panels
-    left to right ... captions in English
-    capitals, annotations on leader lines",
+  prompt: "A horizontal infographic poster,
+    1980s popular-science encyclopedia style.
+    Panel 3, badge 3, heading CREATE KEY,
+    a hand holding a golden key, annotation
+    reading: COPY IT AND STORE IT SAFELY.
+    ... Use only the words listed above.",
   size: "1792x1024"
 })</div>
             </div>
@@ -712,7 +713,7 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
     <figure class="infographic-figure">
       <a href="images/demo-infographic.webp" target="_blank" rel="noopener">
         <img src="images/demo-infographic.webp" width="1600" height="914" loading="lazy"
-             alt="A wide hand-drawn infographic poster on aged paper titled How To Get An API Key, with four numbered panels left to right: signing in at a desktop computer, opening the API keys page of a developer dashboard, a hand holding a newly created golden key, and a credit card beside a monthly invoice. Each panel carries annotations on thin leader lines.">
+             alt="A wide hand-drawn infographic poster on aged paper titled How To Get An API Key. Four numbered panels run left to right, joined by arrows: Sign In, a person at a desktop computer, annotated Enter Email And Password; Open API Keys, a browser window holding a key icon, annotated Find The API Keys Page; Create Key, a hand holding a golden key, annotated Copy It And Store It Safely; and Add Payment, a credit card beside a monthly invoice, annotated Billing Is Usage Based. A banner along the bottom reads Treat Your API Key Like A Password.">
       </a>
       <figcaption>
         <span class="who">generate_image</span>
@@ -722,12 +723,12 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
     </figure>
 
     <p class="provenance" data-lang="en">
-      <strong>Look closely at the lettering.</strong>
-      The prompt asked for English capitals on purpose — Chinese glyphs come out far less reliably. Even so, not all of it landed: panel three reads <em>AAFE LOCATION</em> where it should say SAFE, and panel four's card belongs to a <em>CARDHOLLER</em>. Image models have improved a great deal at text and are still not dependable at it. A generated diagram earns its place as illustration and orientation; anything a reader has to act on belongs in real text, like the steps above.
+      <strong>The lettering took three attempts.</strong>
+      A first pass let the model choose its own annotations and produced <em>AAFE LOCATION</em> where it meant SAFE, and a card issued to a <em>CARDHOLLER</em>. We then tried to patch those two words with <code>edit_image</code>, twice, and it changed neither — it reproduces the whole composition faithfully but will not rewrite text already drawn into a picture. What worked was going back to <code>generate_image</code> and naming every string explicitly, panel by panel, ending with <em>use only the words listed above</em>. Spell the words out up front; you can't correct them afterwards.
     </p>
     <p class="provenance" data-lang="zh">
-      <strong>仔細看圖裡的字。</strong>
-      prompt 刻意要求英文大寫——中文字形的可靠度低得多。即使如此也不是全中：第三格寫成 <em>AAFE LOCATION</em>（應為 SAFE），第四格的持卡人變成 <em>CARDHOLLER</em>。生圖模型處理文字已經進步很多，但仍然不可靠。生成的圖解適合當插圖與導覽；真正要讀者照著做的內容，還是該放在像上面那樣的真實文字裡。
+      <strong>圖裡的字，是第三次才全對的。</strong>
+      第一版讓模型自己決定標註內容，結果出現 <em>AAFE LOCATION</em>（應為 SAFE）與持卡人 <em>CARDHOLLER</em>。接著用 <code>edit_image</code> 想修掉那兩個字，試了兩次，一個都沒改動——它能忠實重現整張構圖，卻改不動已經畫進圖裡的文字。真正有效的做法是回到 <code>generate_image</code>，逐格指定每一串文字，最後加上一句<em>只能用上面列出的字</em>。文字要在生成時就講清楚，事後補救不了。
     </p>
   </div>
 </section>

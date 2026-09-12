@@ -135,7 +135,28 @@ h2{
   font-size:.95rem; font-weight:500; color:var(--cyan);
   margin:0 0 8px;
 }
+.tool .when{
+  display:block; font-size:.78rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--amber); margin-bottom:6px;
+}
 .tool p{ margin:0; color:var(--muted); font-size:.93rem; }
+
+/* ---------- 三模式比較表 ----------
+   卡片講「何時用」，表格講客觀差異——兩者分工，避免把規格塞進散文裡。 */
+.matrix-scroll{ margin-top:28px; overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); }
+.matrix{ border-collapse:collapse; width:100%; min-width:620px; background:var(--surface); font-size:.9rem; }
+.matrix th,.matrix td{ padding:11px 16px; text-align:left; border-bottom:1px solid var(--line); }
+.matrix thead th{
+  font-family:'IBM Plex Mono',monospace; font-weight:500; font-size:.82rem;
+  color:var(--cyan); background:var(--surface-2); white-space:nowrap;
+}
+.matrix thead th:first-child{ color:var(--muted); }
+.matrix tbody th{ font-weight:500; color:var(--text); white-space:nowrap; }
+.matrix td{ color:var(--muted); font-variant-numeric:tabular-nums; }
+.matrix tr:last-child th,.matrix tr:last-child td{ border-bottom:none; }
+/* 唯一的行為分水嶺：只有 iterate 記得上一輪，值得在視覺上單獨標出來 */
+.matrix .yes{ color:var(--cyan); font-weight:600; }
+.matrix .no{ color:var(--muted); }
 
 /* ---------- before / after ---------- */
 .compare{ display:grid; grid-template-columns:1fr 1fr; gap:18px; }
@@ -294,24 +315,77 @@ code{
 <!-- ===================== 三工具 ===================== -->
 <section id="tools">
   <div class="wrap">
-    <p class="eyebrow">Three tools</p>
-    <h2>The whole loop, inside the conversation</h2>
-    <p class="section-lede">Describe it, change it, keep refining it — without leaving your editor or pasting an image anywhere.</p>
+    <p class="eyebrow">Three modes</p>
+    <h2>Start it, change it, or keep talking to it</h2>
+    <p class="section-lede">The three tools differ in one thing that matters more than the rest: whether the model remembers what you said last turn.</p>
 
     <div class="tools">
       <article class="tool">
         <h3>generate_image</h3>
-        <p>Text to image, 1–10 per call. Aspect ratio, output format and filename prefix are all yours to set.</p>
+        <span class="when">Starting from nothing</span>
+        <p>Text in, images out. Use it for the first image of anything — and when you want several takes at once, since it's the only mode that returns up to 10 in a single call.</p>
       </article>
       <article class="tool">
         <h3>edit_image</h3>
-        <p>Edit from reference images — local file paths or URLs. Local files are base64-encoded for you.</p>
+        <span class="when">One clear change</span>
+        <p>Hand it an existing image — a local path or a URL — plus a full description of the change. Each call stands alone, so it's the right choice when you can state the target precisely. Multiple inputs compose into one scene.</p>
       </article>
       <article class="tool">
         <h3>iterate_image</h3>
-        <p>Conversational refinement. Each response carries an id; pass it back and the next turn continues the same thread.</p>
+        <span class="when">Feeling your way there</span>
+        <p>The only mode with memory. Say <q>warmer</q>, then <q>too much, back off</q>, and it knows what you're talking about. Use it when you can't yet describe the destination, only the direction.</p>
       </article>
     </div>
+
+    <div class="matrix-scroll">
+      <table class="matrix">
+        <thead>
+          <tr>
+            <th scope="col">&nbsp;</th>
+            <th scope="col">generate_image</th>
+            <th scope="col">edit_image</th>
+            <th scope="col">iterate_image</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">Remembers previous turns</th>
+            <td class="no">No</td>
+            <td class="no">No</td>
+            <td class="yes">Yes — via <code>previous_response_id</code></td>
+          </tr>
+          <tr>
+            <th scope="row">Input image</th>
+            <td>None</td>
+            <td>Required, one or more</td>
+            <td>Optional, first turn only</td>
+          </tr>
+          <tr>
+            <th scope="row">Images per call</th>
+            <td>1–10</td>
+            <td>1–10</td>
+            <td>1</td>
+          </tr>
+          <tr>
+            <th scope="row">Default output format</th>
+            <td>png</td>
+            <td>png</td>
+            <td>webp</td>
+          </tr>
+          <tr>
+            <th scope="row">Endpoint</th>
+            <td><code>/images/generations</code></td>
+            <td><code>/images/edits</code></td>
+            <td><code>/responses</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="provenance">
+      <strong>A practical rule.</strong>
+      If you can write the finished result down in one sentence, use <code>edit_image</code> — it's cheaper to reason about and every call is reproducible. If you'd only know it when you see it, use <code>iterate_image</code> and talk your way there one nudge at a time.
+    </p>
   </div>
 </section>
 

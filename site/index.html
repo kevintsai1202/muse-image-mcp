@@ -722,14 +722,6 @@ html[data-ui-lang="zh"] .copy.is-fallback::after{ content:"請按 Ctrl+C"; }
       </figcaption>
     </figure>
 
-    <p class="provenance" data-lang="en">
-      <strong>The lettering took three attempts.</strong>
-      A first pass let the model choose its own annotations and produced <em>AAFE LOCATION</em> where it meant SAFE, and a card issued to a <em>CARDHOLLER</em>. We then tried to patch those two words with <code>edit_image</code>, twice, and it changed neither — it reproduces the whole composition faithfully but will not rewrite text already drawn into a picture. What worked was going back to <code>generate_image</code> and naming every string explicitly, panel by panel, ending with <em>use only the words listed above</em>. Spell the words out up front; you can't correct them afterwards.
-    </p>
-    <p class="provenance" data-lang="zh">
-      <strong>圖裡的字，是第三次才全對的。</strong>
-      第一版讓模型自己決定標註內容，結果出現 <em>AAFE LOCATION</em>（應為 SAFE）與持卡人 <em>CARDHOLLER</em>。接著用 <code>edit_image</code> 想修掉那兩個字，試了兩次，一個都沒改動——它能忠實重現整張構圖，卻改不動已經畫進圖裡的文字。真正有效的做法是回到 <code>generate_image</code>，逐格指定每一串文字，最後加上一句<em>只能用上面列出的字</em>。文字要在生成時就講清楚，事後補救不了。
-    </p>
   </div>
 </section>
 

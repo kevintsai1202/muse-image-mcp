@@ -9,20 +9,22 @@
 
 ## 安裝
 
-### 方式一：npx（推薦，不需 clone）
-
-```bash
-claude mcp add muse-image npx -y muse-image-mcp --scope user --env MUSE_API_KEY=你的key
-```
-
-### 方式二：本機開發
+### 方式一：本機 clone（目前唯一可用的方式）
 
 ```bash
 git clone https://github.com/kevintsai1202/muse-image-mcp.git
 cd muse-image-mcp
 npm install
 npm run build
-claude mcp add muse-image node <你的專案路徑>/dist/index.js --scope user
+claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- node <你 clone 的 muse-image-mcp 路徑>/dist/index.js
+```
+
+### 方式二：npx（待本套件上架 npm 後可用）
+
+本套件目前**尚未發佈到 npm**，下列指令在套件上架前會出現 404，請先使用方式一。
+
+```bash
+claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- npx -y muse-image-mcp
 ```
 
 裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
@@ -62,6 +64,8 @@ MUSE_API_KEY=你的key
 | `MUSE_TIMEOUT_MS` | 否 | `120000` | 單次請求逾時毫秒數 |
 
 > `MUSE_OUTPUT_DIR` 的預設值 `<cwd>/generated-images` 所指的 `cwd`，是 MCP client 啟動這個 server 時所在的工作目錄。在 Claude Code 中即為你啟動 session 的專案根目錄，因此圖片會落在你目前專案下的 `generated-images/`。若你的 client 不是這個行為、或想要固定的輸出位置，請把 `MUSE_OUTPUT_DIR` 設為絕對路徑。
+>
+> v0.1.0 起預設輸出目錄由 `muse-output/` 改為 `generated-images/`。舊目錄不會被自動刪除或搬移，如有舊圖請自行處理。
 
 ## 切換模型與額外參數
 
@@ -104,6 +108,8 @@ MUSE_EXTRA_PARAMS={"quality":"ultra"}
 ```
 
 換模型請用 `model` 參數或 `MUSE_MODEL`，不要寫在 `extra_params` 裡。
+
+除上述核心欄位外，`extra_params` 會覆寫同名的一般參數，包含 `n`、`size`、`output_format`、`reasoning_strength`。這些欄位在工具 schema 上的取值驗證（例如 `n` 限 1–10）在此路徑下**不生效**——這是刻意保留的逃生口，讓新模型改變參數語意時仍可繞過既有限制。使用 `extra_params` 覆寫 `n` 時請自行留意張數與成本。
 
 ## 工具
 

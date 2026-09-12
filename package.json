@@ -1,0 +1,24 @@
+{
+  "name": "muse-image-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for Meta Muse image generation",
+  "type": "module",
+  "bin": { "muse-image-mcp": "./dist/index.js" },
+  "files": ["dist"],
+  "engines": { "node": ">=20.12.0" },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "smoke": "vitest run --config vitest.e2e.config.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

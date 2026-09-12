@@ -3,6 +3,24 @@
   "version": "0.1.0",
   "description": "MCP server for Meta Muse image generation",
   "type": "module",
+  "license": "MIT",
+  "author": "Kevin Tsai",
+  "homepage": "https://github.com/kevintsai1202/muse-image-mcp#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevintsai1202/muse-image-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kevintsai1202/muse-image-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "meta-muse",
+    "image-generation",
+    "claude",
+    "claude-code"
+  ],
   "bin": { "muse-image-mcp": "./dist/index.js" },
   "files": ["dist"],
   "engines": { "node": ">=20.12.0" },
@@ -10,7 +28,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "smoke": "vitest run --config vitest.e2e.config.ts"
+    "smoke": "vitest run --config vitest.e2e.config.ts",
+    "prepublishOnly": "npm run build && npm test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

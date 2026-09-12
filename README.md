@@ -9,46 +9,44 @@
 
 ## 安裝
 
+### 方式一：npx（推薦，不需 clone）
+
 ```bash
+claude mcp add muse-image npx -y muse-image-mcp --scope user --env MUSE_API_KEY=你的key
+```
+
+### 方式二：本機開發
+
+```bash
+git clone https://github.com/kevintsai1202/muse-image-mcp.git
+cd muse-image-mcp
 npm install
 npm run build
+claude mcp add muse-image node <你的專案路徑>/dist/index.js --scope user
 ```
+
+裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
 
 ## 設定 API key
 
-有兩種方式，**優先序為 MCP 設定的 `env` > `.env` 檔**：
+優先序為 **MCP 設定的 `env` 區塊 > `.env` 檔**。
 
-### 方式一：`.env` 檔（推薦）
+### 用 MCP 設定的 env 區塊（npx 安裝時的唯一途徑）
 
-在**本專案根目錄**建立 `.env`（可複製 `.env.example`）：
+見上方 `--env MUSE_API_KEY=你的key`。
+
+### 用 `.env` 檔
+
+server 會依序搜尋下列位置，採用第一個存在的檔案：
+
+1. `<套件根目錄>/.env` — 本機 clone 時最方便
+2. `~/.muse-image-mcp/.env` — 經 npx 安裝時使用者唯一可控的位置
 
 ```
 MUSE_API_KEY=你的key
 ```
 
-注意 `.env` 是從**套件根目錄**讀取，不是從你執行 Claude Code 的專案目錄——因為 MCP server 的工作目錄由 client 決定，不可靠。`.env` 已列在 `.gitignore`，不會被提交。
-
-### 方式二：MCP 設定的 env 區塊
-
-```bash
-claude mcp add muse-image node <你的專案路徑>\dist\index.js \
-  --scope user \
-  --env MUSE_API_KEY=你的key
-```
-
-> 將 `<你的專案路徑>` 換成你實際 clone 這個專案的位置（例如 `D:\GitHub\muse-image-mcp`）。
-
-## 設定到 Claude Code
-
-用了 `.env` 的話，註冊時就不必再帶 key：
-
-```bash
-claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
-```
-
-同樣把 `<你的專案路徑>` 換成實際 clone 位置。
-
-裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。
+注意 `.env` 不是從你執行 Claude Code 的專案目錄讀取——MCP server 的工作目錄由 client 決定，不適合放設定。`.env` 已列在 `.gitignore`，不會被提交。
 
 ### 環境變數
 
@@ -57,11 +55,55 @@ claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
 | 變數 | 必填 | 預設 | 說明 |
 |---|---|---|---|
 | `MUSE_API_KEY` | 是 | — | API key。缺少時 server 會立刻結束並在 stderr 說明 |
-| `MUSE_OUTPUT_DIR` | 否 | `<cwd>/muse-output` | 圖片輸出目錄，不存在時自動建立 |
+| `MUSE_MODEL` | 否 | `muse-image-1.0` | 全域預設模型 ID |
+| `MUSE_EXTRA_PARAMS` | 否 | `{}` | JSON 物件字串，全域預設額外參數 |
+| `MUSE_OUTPUT_DIR` | 否 | `<cwd>/generated-images` | 圖片輸出目錄，不存在時自動建立 |
 | `MUSE_BASE_URL` | 否 | `https://api.meta.ai/v1` | API base URL |
 | `MUSE_TIMEOUT_MS` | 否 | `120000` | 單次請求逾時毫秒數 |
 
-> `MUSE_OUTPUT_DIR` 的預設值 `<cwd>/muse-output` 所指的 `cwd`，是 **MCP client 啟動這個 server 時所在的工作目錄**——如同上方 `.env` 一節所說，這個目錄由 client 決定、不可靠，多半不是本專案目錄。也就是說圖片實際會落在「啟動 server 當下 client 的工作目錄」下的 `muse-output/`。如果想要固定的輸出位置，請明確設定 `MUSE_OUTPUT_DIR` 為絕對路徑。
+> `MUSE_OUTPUT_DIR` 的預設值 `<cwd>/generated-images` 所指的 `cwd`，是 MCP client 啟動這個 server 時所在的工作目錄。在 Claude Code 中即為你啟動 session 的專案根目錄，因此圖片會落在你目前專案下的 `generated-images/`。若你的 client 不是這個行為、或想要固定的輸出位置，請把 `MUSE_OUTPUT_DIR` 設為絕對路徑。
+
+## 切換模型與額外參數
+
+新模型推出時不需要等本專案改版——用環境變數換模型，用 `extra_params` 送新參數。
+
+### 換模型
+
+全域切換寫在 `.env` 或 MCP 設定：
+
+```
+MUSE_MODEL=muse-image-2.0
+```
+
+單次指定則直接在對話中要求，Agent 會帶 `model` 參數：
+
+```jsonc
+{ "prompt": "a red fox", "model": "muse-image-2.0" }
+```
+
+### 送新參數
+
+全域預設寫成 JSON 物件字串：
+
+```
+MUSE_EXTRA_PARAMS={"quality":"ultra"}
+```
+
+單次覆寫用 `extra_params`，會與全域設定合併、單次的優先：
+
+```jsonc
+{ "prompt": "a red fox", "extra_params": { "style_preset": "anime" } }
+```
+
+### 核心欄位保護
+
+`model`、`prompt`、`response_format`、`images`、`input`、`store`、`previous_response_id` 這些決定請求結構的欄位不會被 `extra_params` 覆寫——寫了也不生效，並且會在回應末端看到：
+
+```
+⚠️ 下列 extra_params 與請求核心欄位衝突，已忽略：model, prompt
+```
+
+換模型請用 `model` 參數或 `MUSE_MODEL`，不要寫在 `extra_params` 裡。
 
 ## 工具
 
@@ -77,6 +119,8 @@ claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
 | `output_format` | 否 | `png` | `png` / `webp` / `jpeg` |
 | `reasoning_strength` | 否 | `high` | `high` / `low`，計價相同 |
 | `filename_prefix` | 否 | `muse` | 輸出檔名前綴 |
+| `model` | 否 | — | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
+| `extra_params` | 否 | — | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
 
 ### `edit_image` — 依圖改圖
 
@@ -89,6 +133,8 @@ claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
 | `output_format` | 否 | `png` | `png` / `webp` / `jpeg` |
 | `reasoning_strength` | 否 | `high` | `high` / `low`，計價相同 |
 | `filename_prefix` | 否 | `muse-edit` | 輸出檔名前綴 |
+| `model` | 否 | — | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
+| `extra_params` | 否 | — | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
 
 ### `iterate_image` — 對話式迭代修圖
 
@@ -99,6 +145,8 @@ claude mcp add muse-image node <你的專案路徑>\dist\index.js --scope user
 | `images` | 否 | 首輪參考圖 |
 | `reasoning_strength` | 否 | 預設 `high` |
 | `filename_prefix` | 否 | 預設 `muse-iter` |
+| `model` | 否 | 模型 ID，省略則用伺服器設定的預設（見 `MUSE_MODEL`） |
+| `extra_params` | 否 | 物件，傳給 API 的額外參數，與全域 `MUSE_EXTRA_PARAMS` 合併、單次優先；核心欄位受保護（見上方「核心欄位保護」） |
 
 注意此工具**沒有** `n`、`size`、`output_format` 參數——`/v1/responses` 端點一次只回傳一張圖，且不接受輸出格式參數（見下方「`/v1/responses` 實測結果」，未指定時 Meta 端預設輸出 webp）。
 

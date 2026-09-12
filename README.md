@@ -9,7 +9,15 @@
 
 ## 安裝
 
-### 方式一：本機 clone（目前唯一可用的方式）
+### 方式一：npx（推薦，不需 clone）
+
+```bash
+claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- npx -y muse-image-mcp
+```
+
+`npx` 會自動抓取最新版執行，不需要先安裝。
+
+### 方式二：本機 clone（要改程式碼時用）
 
 ```bash
 git clone https://github.com/kevintsai1202/muse-image-mcp.git
@@ -17,14 +25,6 @@ cd muse-image-mcp
 npm install
 npm run build
 claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- node <你 clone 的 muse-image-mcp 路徑>/dist/index.js
-```
-
-### 方式二：npx（待本套件上架 npm 後可用）
-
-本套件目前**尚未發佈到 npm**，下列指令在套件上架前會出現 404，請先使用方式一。
-
-```bash
-claude mcp add muse-image --scope user --env MUSE_API_KEY=你的key -- npx -y muse-image-mcp
 ```
 
 裝完要**重開一個新的 session**，`mcp__muse-image__*` 三個工具才會載入。用 `claude mcp list` 確認顯示 `muse-image: ... - Connected`。

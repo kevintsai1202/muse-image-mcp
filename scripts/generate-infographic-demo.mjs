@@ -31,15 +31,18 @@ const { loadConfig } = await import("../dist/config.js");
 const { saveImages } = await import("../dist/image-store.js");
 
 const PROMPT = [
-  "A vintage Chinese popular-science encyclopedia illustration from the 1980s,",
-  "a four-step diagram explaining how to obtain an API key:",
-  "(1) a person sitting at a desktop computer,",
-  "(2) a browser dashboard window with a key symbol on screen,",
-  "(3) a hand holding up a golden key,",
-  "(4) a credit card lying next to a paper receipt.",
-  "Large circular numbered badges 1 2 3 4 mark each step, thin arrows connect them in order.",
-  "Flat gouache and watercolour textures on warm aged paper, bright primary colours,",
-  "hand-drawn ink linework, clean diagrammatic layout, no text labels, no lettering."
+  "A richly detailed horizontal infographic poster in the style of a 1980s popular-science encyclopedia,",
+  "titled \"HOW TO GET AN API KEY\" in a bold banner across the top.",
+  "Four numbered panels arranged left to right, connected by arrows:",
+  "panel 1, a person at a desktop computer signing in, captioned \"SIGN IN\";",
+  "panel 2, a browser dashboard window with a key icon on screen, captioned \"OPEN API KEYS\";",
+  "panel 3, a hand holding up a golden key, captioned \"CREATE KEY\";",
+  "panel 4, a credit card beside a printed monthly invoice, captioned \"ADD PAYMENT\".",
+  "Each panel has a large circular numbered badge and small explanatory annotations",
+  "with thin leader lines pointing at details.",
+  "Rich gouache and watercolour textures on warm aged paper, detailed hand-drawn ink linework,",
+  "cross-hatching and stippling, bright primary colours, a decorative ruled border.",
+  "All lettering in clean legible English capitals, correctly spelled."
 ].join(" ");
 
 const client = new MuseClient(loadConfig());
@@ -52,7 +55,7 @@ console.log("Prompt：" + PROMPT + "\n");
 const { result: response } = await client.generate({
   prompt: PROMPT,
   n: 1,
-  size: "1024x1024",
+  size: "1792x1024",
   outputFormat: "png",
   reasoningStrength: "high"
 });

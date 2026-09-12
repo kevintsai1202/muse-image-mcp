@@ -83,6 +83,41 @@ describe.skipIf(!enabled)("Muse API 煙霧測試", () => {
     });
     console.error(`[smoke] 迭代輸出：${paths.join(", ")}；response_id=${result.responseId}`);
   });
+
+  it("iterate_image 兩輪對話：第二輪不應重複回傳第一輪的圖片（Task 7）", async () => {
+    const config = loadConfig();
+    const client = new MuseClient(config);
+
+    // 第一輪：開新對話
+    const turn1 = await client.iterate({
+      prompt: "a simple flat-style icon of a purple star on white background"
+    });
+    expect(turn1.responseId).not.toBe("");
+    expect(turn1.images.length).toBe(1);
+
+    // 第二輪：帶入 previous_response_id 續接對話，驗證是否只回傳「這一輪」新生成的圖片，
+    // 而不是把第一輪的 image_generation_call 也一併撈出來（extractB64Images 是無去重的深度走訪）
+    const turn2 = await client.iterate({
+      prompt: "now make the star yellow",
+      previousResponseId: turn1.responseId
+    });
+    expect(turn2.responseId).not.toBe("");
+
+    // 這就是 Task 7 要驗證的核心事實：第二輪實際回傳幾張圖片。
+    // 實測結果：剛好 1 張，並未把第一輪的 image_generation_call 也撈出來——
+    // extractB64Images 不需修改。
+    expect(turn2.images.length).toBe(1);
+
+    const paths = await saveImages(turn2.images, {
+      outputDir: config.outputDir,
+      prefix: "smoke-iterate-turn2",
+      format: turn2.outputFormat
+    });
+    console.error(
+      `[smoke] 兩輪對話輸出：turn1=${turn1.responseId} turn2=${turn2.responseId} ` +
+        `turn2.images.length=${turn2.images.length} paths=${paths.join(", ")}`
+    );
+  });
 });
 
 describe("extractB64Images 在真實結構上的健全性", () => {

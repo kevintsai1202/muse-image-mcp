@@ -218,6 +218,37 @@ describe("MuseClient.iterate", () => {
     expect(result.images).toEqual(["UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="]);
     expect(result.outputFormat).toBe("webp");
   });
+
+  // 2026-09-12 Task 7：帶 previous_response_id 的多輪對話實測。
+  // 真實情況：對 tests/smoke.e2e.test.ts 的兩輪 iterate 呼叫（真實打 Muse API，花費 2 張圖 US$0.02）
+  // 做了第二輪呼叫，第二輪 request 帶入第一輪的 response_id。用檔案系統證據確認結果——
+  // saveImages 只寫出 1 個檔案（無 -2、-3 等後續序號），代表第二輪回應的 output[] 裡只有
+  // 1 個 image_generation_call，並未把第一輪已經生成過的圖片也一併帶回來。
+  // 侷限說明：原本計畫用 console.error 在 iterate() 內暫時印出第二輪原始回應以取得逐位元組的真實
+  // payload，但 vitest 5 在非 verbose 模式下不會印出「通過」測試的 console 輸出，這份 debug log
+  // 因此遺失；依 Task 7 的預算上限（最多 2 次真實付費呼叫）不得為了補印而重打一次真 API。
+  // 因此這個 pinning test 沿用 Task 6 已驗證為真的 REAL_RESPONSES_SHAPE（同一批真實 API 回應形狀），
+  // 只是把 request 換成帶 previousResponseId 的多輪對話呼叫，用來釘住的事實是：
+  // 「即使 request 帶 previous_response_id，extractB64Images 對這個真實形狀仍只會取出 1 張當輪圖片」，
+  // 這與上面已測過的檔案系統證據一致。這不是對第二輪原始回應的逐位元組重現，如需要，建議之後
+  // 用真實 API 重跑一次並改善日誌擷取方式（例如改用 --reporter=verbose 或直接寫檔）。
+  it("多輪對話：request 帶 previous_response_id 時，真實回應形狀仍只解析出當輪 1 張圖片", async () => {
+    const fetchImpl = fakeFetch(200, REAL_RESPONSES_SHAPE);
+    const client = new MuseClient(CONFIG, { fetchImpl: fetchImpl as unknown as typeof fetch, sleep: noSleep });
+
+    const result = await client.iterate({
+      prompt: "now make the star yellow",
+      previousResponseId: "resp_turn1_placeholder"
+    });
+
+    // 確認 previous_response_id 確實被送出（多輪對話的請求面）
+    const body = JSON.parse((fetchImpl.mock.calls[0]![1] as RequestInit).body as string);
+    expect(body.previous_response_id).toBe("resp_turn1_placeholder");
+
+    // 確認回應面：即使是續接對話，仍只取出當輪 1 張圖片，不會重複帶出歷史圖片
+    expect(result.images).toHaveLength(1);
+    expect(result.images).toEqual(["UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="]);
+  });
 });
 
 describe("重試行為", () => {

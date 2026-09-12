@@ -128,6 +128,10 @@ Meta 未公開 `/v1/responses` 的回應 schema，Task 3 實作時是比照 Open
 - **圖片資料位置**：不在任何 `b64_json` 欄位，而是在 `output[]` 陣列中 `type === "image_generation_call"` 項目的 `result` 欄位，值直接是 base64（無 data URL 前綴）。`src/muse-client.ts` 的 `extractB64Images` 已改為同時辨識 `b64_json`（保留給其他可能形狀）與這個實測到的 `image_generation_call.result` 形狀。
 - **`output_format` 欄位不存在**：回應中完全沒有 `output_format` 欄位。原本的 fallback 預設值 `"png"`是錯的——iterate 因為送出的 request 不帶 `output_format` 參數，Meta 端套用了與 `/images/generations` 相同的預設值 `webp`，實測回傳的 base64 解出來確實是 WebP 格式（RIFF/WEBP 檔頭）。fallback 已改為 `"webp"`。
 
+### 多輪對話（`previous_response_id`）已實測驗證
+
+Task 7 以真實 API 做了兩輪對話：先呼叫一次 `iterate_image` 取得 `response_id`，再用該 id 當 `previous_response_id` 呼叫第二輪。結果：第二輪只回傳當輪新生成的 **1 張圖片**，並未把第一輪已經生成過的圖片也重複帶回來——`extractB64Images` 的深度走訪邏輯對此無需修改。（受限於測試工具在該次執行中未能完整擷取第二輪原始回應的逐位元組內容，這個結論是以「輸出檔案數量剛好 1 個、無 -2/-3 等後續序號」的檔案系統證據佐證，而非逐位元組比對；`tests/muse-client.test.ts` 中新增的 pinning test 沿用 Task 6 已驗證的真實回應形狀來釘住這個行為。）
+
 ## 計價
 
 每張生成圖片 **US$0.01**，與 `reasoning_strength` 無關。每次工具回應都會揭露該次的預估成本。

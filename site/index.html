@@ -174,6 +174,22 @@ figcaption .who{
 figcaption .who.amber{ background:var(--amber); }
 figcaption q{ color:var(--text); font-style:italic; }
 
+/* 兩組對照各自的小標：用等寬字接工具名，與內文明確分層 */
+.demo-title{
+  font-family:'IBM Plex Mono',monospace;
+  font-size:.88rem; font-weight:500; color:var(--cyan);
+  margin:38px 0 6px; display:flex; flex-wrap:wrap; gap:8px; align-items:baseline;
+}
+.demo-title:first-of-type{ margin-top:0; }
+.demo-title span{
+  font-family:'IBM Plex Sans',sans-serif; font-size:.95rem;
+  color:var(--text); font-weight:400;
+}
+.demo-note{
+  margin:14px 0 0; font-size:.9rem; color:var(--muted);
+}
+.demo-note strong{ color:var(--text); font-weight:600; }
+
 .provenance{
   margin-top:26px; padding:14px 18px;
   border-left:2px solid var(--amber);
@@ -395,8 +411,10 @@ code{
 <section id="output">
   <div class="wrap">
     <p class="eyebrow">Real output</p>
-    <h2>Same frame, different light</h2>
-    <p class="section-lede">One <code>generate_image</code> call, then one <code>edit_image</code> call against its result. The composition survives; only the light changes.</p>
+    <h2>What each mode does to an image</h2>
+    <p class="section-lede">Both pairs below came out of this server while this page was being built. They show the difference the comparison table above can only assert.</p>
+
+    <h3 class="demo-title">edit_image <span>— same frame, different light</span></h3>
 
     <div class="compare">
       <figure>
@@ -417,9 +435,38 @@ code{
       </figure>
     </div>
 
+    <p class="demo-note">
+      One <code>generate_image</code> call, then one <code>edit_image</code> call against its result. The composition, the objects, the camera angle — all survive. Only the light changes, because that's all the instruction asked for.
+    </p>
+
+    <h3 class="demo-title">iterate_image <span>— same conversation, new interpretation</span></h3>
+
+    <div class="compare">
+      <figure>
+        <img src="images/demo-iterate-1.webp" width="900" height="900" loading="lazy"
+             alt="A slim white ceramic vase standing on a concrete pedestal against a pale grey background.">
+        <figcaption>
+          <span class="who amber">turn 1</span>
+          <q>A minimalist ceramic vase on a concrete pedestal, soft overcast daylight, clean studio background</q>
+        </figcaption>
+      </figure>
+      <figure>
+        <img src="images/demo-iterate-2.webp" width="900" height="900" loading="lazy"
+             alt="A rounded deep cobalt blue glazed vase holding a bare dried branch, on linen against a warm beige wall.">
+        <figcaption>
+          <span class="who">turn 2</span>
+          <q>Make the vase deep cobalt blue and add a single dried branch</q>
+        </figcaption>
+      </figure>
+    </div>
+
+    <p class="demo-note">
+      Turn 2 sent <strong>one sentence and no image</strong> — just the id from turn 1. Notice what changed: not only the colour and the branch, but the vase's shape, the surface it stands on, the whole background. That's the honest difference between the two modes. <strong><code>edit_image</code> preserves the frame; <code>iterate_image</code> continues the conversation and re-renders the scene.</strong> Reach for iterate when you're still exploring, and for edit once you know exactly what you want changed.
+    </p>
+
     <p class="provenance">
       <strong>Every image on this page was made by this server.</strong>
-      The prism above, and both frames here — generated during the build of this page, with the prompts printed next to them. Nothing is stock.
+      The prism at the top and all four frames here — generated during the build of this page, with the prompts printed next to them. Nothing is stock.
     </p>
   </div>
 </section>

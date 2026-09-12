@@ -20,7 +20,7 @@
 - stdout 是 JSON-RPC 通道，任何日誌一律走 `console.error`。
 - `tests/smoke.e2e.test.ts` 全程不得修改——它呼叫真實 API 需付費。
 - 測試指令 `npm test`（vitest run，不含 e2e）；建置 `npm run build`。
-- 每個 task 結束時 `npm test` 必須全綠、`npm run build` 必須 exit 0。
+- 每個 task 結束時 `npm test` 必須全綠、`npm run build` 必須 exit 0。**唯一例外是 Task 4**——該 task 變更 `MuseClient` 的回傳型別，工具層必然暫時對不上，其驗收標準改為「`tests/muse-client.test.ts`、`tests/request-body.test.ts`、`tests/config.test.ts`、`tests/errors.test.ts`、`tests/image-store.test.ts` 五支全綠」，`tests/tools.test.ts` 與 build 的綠燈要求延到 Task 5。
 - 分支：`feat/model-switching`（已建立，spec 已 commit 於 `2d816af`）。
 
 ---

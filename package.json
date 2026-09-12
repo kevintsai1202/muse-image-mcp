@@ -37,7 +37,8 @@
     "test:watch": "vitest",
     "smoke": "vitest run --config vitest.e2e.config.ts",
     "typecheck": "tsc -p tsconfig.test.json",
-    "prepublishOnly": "npm run build && npm run typecheck && npm test"
+    "prepublishOnly": "npm run build && npm run typecheck && npm test",
+    "version": "node scripts/sync-server-version.mjs && git add server.json"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

@@ -59,6 +59,11 @@ jobs:
           fi
           echo "版本一致：$PKG_VERSION"
 
+      - name: 確認 server.json 版本與 package.json 一致
+        # server.json 告訴 Registry 要指向 npm 上的哪一版，漏同步會讓目錄指向舊版。
+        # 平時由 npm version 的 version lifecycle 自動同步，這裡是防呆。
+        run: node scripts/sync-server-version.mjs --check
+
       - name: 建置
         run: npm run build
 
@@ -72,3 +77,23 @@ jobs:
       - name: 發佈到 npm
         # 不需要 NODE_AUTH_TOKEN：憑證由 OIDC 提供
         run: npm publish
+
+      # ── 以下把同一版登記到官方 MCP Registry。
+      # Registry 只存 metadata 並指向上面剛發佈的 npm 版本，所以順序不能顛倒：
+      # 它會去 npm 讀 package.json 的 mcpName 驗證套件所有權，npm 上沒有這一版就會失敗。
+      - name: 安裝 mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: 認證 MCP Registry
+        # github-oidc 用的是本 job 已有的 id-token 權限（npm trusted publishing 也靠它），
+        # 因此不需要任何 secret，也沒有會過期的 token 要維護
+        run: ./mcp-publisher login github-oidc
+
+      - name: 驗證 server.json
+        # publish 失敗會讓整個發版停在「npm 已發、Registry 未更新」的半完成狀態，
+        # 先驗一次把 schema 問題擋在前面（例如 description 有 100 字元上限）
+        run: ./mcp-publisher validate
+
+      - name: 登記到 MCP Registry
+        run: ./mcp-publisher publish

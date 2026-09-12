@@ -1,4 +1,4 @@
-# 持續整合：每次推送與 PR 都驗證建置、型別與測試。
+# 持續整合：每次推送與 PR 都驗證建置、型別、測試與實際安裝後的執行。
 # 不執行 npm run smoke——煙霧測試會呼叫真實 Meta Muse API 並產生費用。
 name: CI
 
@@ -12,14 +12,14 @@ permissions:
   contents: read
 
 jobs:
+  # 開發工具鏈的驗證。版本下限由 vitest 決定（engines: ^22.12.0 || ^24.0.0 || >=26.0.0），
+  # 而非 package.json 的 engines——後者是「發佈後的套件需要什麼 Node」，兩者是不同的事。
   verify:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        # 20.12.0 是 package.json engines 宣告的下限（process.loadEnvFile 的最低版本），
-        # 24.x 是目前的開發版本；兩端都測才能確保宣告的相容範圍屬實
-        node-version: ["20.12.0", "24.x"]
+        node-version: ["22.12.0", "24.x"]
 
     steps:
       - uses: actions/checkout@v6
@@ -43,3 +43,63 @@ jobs:
 
       - name: 驗證打包內容
         run: npm pack --dry-run
+
+  # 驗證 package.json 宣告的 engines 下限屬實：把打包後的 tarball 裝進乾淨目錄，
+  # 用最低支援版本的 Node 實際啟動 server 並完成一次 JSON-RPC 握手。
+  # 這測的是「使用者真正裝到的東西」，不是原始碼——開發工具鏈（vitest）不支援這麼舊的 Node，
+  # 但發佈出去的 dist/ 必須支援，否則 engines 的宣告就是假的。
+  runtime-compat:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: 取得 package.json 宣告的 Node 下限
+        id: floor
+        run: |
+          FLOOR="$(node -p "require('./package.json').engines.node.replace(/^>=/, '')")"
+          echo "version=$FLOOR" >> "$GITHUB_OUTPUT"
+          echo "engines 下限：$FLOOR"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24.x"
+          cache: npm
+
+      - name: 安裝相依並打包
+        run: |
+          npm ci
+          npm run build
+          npm pack
+
+      - name: 切換到 engines 下限的 Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ steps.floor.outputs.version }}
+
+      - name: 在乾淨目錄安裝 tarball 並完成 JSON-RPC 握手
+        run: |
+          node --version
+          mkdir -p /tmp/rt && cd /tmp/rt
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE"/muse-image-mcp-*.tgz --omit=dev
+          # 缺 API key 時應以設定錯誤結束（exit 1），證明二進位可執行
+          if MUSE_API_KEY= npx muse-image-mcp </dev/null; then
+            echo "預期缺少 API key 時應以非零碼結束，實際卻成功"; exit 1
+          fi
+          # 帶假 key 完成 tools/list 握手，確認三個工具都載入且 stdout 通道乾淨
+          echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+            | MUSE_API_KEY=fake-key npx muse-image-mcp 1>out.json 2>err.log
+          node -e "
+            const fs = require('fs');
+            const raw = fs.readFileSync('out.json', 'utf8').trim();
+            if (raw.split('\n').length !== 1) throw new Error('stdout 不是精確一行，JSON-RPC 通道被污染');
+            const tools = JSON.parse(raw).result.tools;
+            if (tools.length !== 3) throw new Error('預期 3 個工具，實際 ' + tools.length);
+            for (const t of tools) {
+              const props = Object.keys(t.inputSchema.properties);
+              for (const required of ['model', 'extra_params']) {
+                if (!props.includes(required)) throw new Error(t.name + ' 缺少參數 ' + required);
+              }
+            }
+            console.log('握手通過：' + tools.map(t => t.name).join(', '));
+          "

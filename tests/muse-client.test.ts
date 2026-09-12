@@ -172,6 +172,52 @@ describe("MuseClient.iterate", () => {
     });
     await expect(client.iterate({ prompt: "x" })).rejects.toMatchObject({ kind: "server" });
   });
+
+  // 2026-09-12 實測 /v1/responses 真實回應結構（節錄自煙霧測試，圖片 base64 已截短）：
+  // output[] 內混有 reasoning、message、image_generation_call 三種 type，
+  // 圖片資料在 image_generation_call.result（非 b64_json），且回應中沒有 output_format 欄位。
+  const REAL_RESPONSES_SHAPE = {
+    model: "muse-image-1.0",
+    id: "resp_6aa4c23f99592ae0ac454928",
+    object: "response",
+    status: "completed",
+    created_at: 1789182527,
+    error: null,
+    incomplete_details: null,
+    output: [
+      {
+        type: "reasoning",
+        id: "rs_6aa4c23f8b0b6df47fb64ab7",
+        summary: [{ type: "summary_text", text: "設計中的圖示說明文字" }],
+        status: "completed"
+      },
+      {
+        type: "message",
+        id: "msg_6aa4c23f8072b0d3598c4ade",
+        role: "assistant",
+        content: [{ type: "output_text", text: "", annotations: [], logprobs: [] }],
+        status: "completed"
+      },
+      {
+        type: "image_generation_call",
+        id: "ig_redacted",
+        status: "completed",
+        result: "UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="
+      }
+    ]
+  };
+
+  it("實測形狀：從 image_generation_call.result 取出圖片，output_format 缺席時預設 webp", async () => {
+    const client = new MuseClient(CONFIG, {
+      fetchImpl: fakeFetch(200, REAL_RESPONSES_SHAPE) as unknown as typeof fetch,
+      sleep: noSleep
+    });
+
+    const result = await client.iterate({ prompt: "a simple flat-style icon of a green triangle" });
+    expect(result.responseId).toBe("resp_6aa4c23f99592ae0ac454928");
+    expect(result.images).toEqual(["UklGRi5rAABXRUJQVlA4WAoAAAAEAAAAPwYAPwYAVlA4IIZpAABwHgSdASpABkAGPg=="]);
+    expect(result.outputFormat).toBe("webp");
+  });
 });
 
 describe("重試行為", () => {
@@ -232,5 +278,15 @@ describe("extractB64Images", () => {
 
   it("沒有任何 b64_json 時回傳空陣列", () => {
     expect(extractB64Images({ a: 1, b: "text" })).toEqual([]);
+  });
+
+  it("實測形狀：從 type === image_generation_call 的 result 欄位取出圖片", () => {
+    const node = {
+      output: [
+        { type: "reasoning", summary: [{ type: "summary_text", text: "not an image" }] },
+        { type: "image_generation_call", result: "REAL_IMG_1" }
+      ]
+    };
+    expect(extractB64Images(node)).toEqual(["REAL_IMG_1"]);
   });
 });

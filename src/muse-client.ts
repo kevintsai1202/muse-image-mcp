@@ -26,8 +26,11 @@ export interface MuseClientDeps {
 const defaultSleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * 深度走訪任意 JSON 結構，收集所有 b64_json 字串。
- * /v1/responses 的回應結構官方文件未載明，因此不硬編欄位路徑。
+ * 深度走訪任意 JSON 結構，收集所有圖片的 base64 字串。
+ * /v1/responses 的回應結構官方文件未載明，因此不硬編欄位路徑，改用兩種已知形狀辨識：
+ * (1) 任意層級的 `b64_json` 字串欄位（OpenAI Responses 慣例的猜測形狀）；
+ * (2) 實測 Meta Muse API 的真實形狀——`output[]` 陣列中 `type === "image_generation_call"`
+ *     的項目，圖片資料在其 `result` 欄位（直接是 base64，無 data URL 前綴，預設 webp）。
  */
 export function extractB64Images(node: unknown): string[] {
   const found: string[] = [];
@@ -38,7 +41,12 @@ export function extractB64Images(node: unknown): string[] {
       return;
     }
     if (value && typeof value === "object") {
-      for (const [key, child] of Object.entries(value)) {
+      const obj = value as Record<string, unknown>;
+      // 實測發現的真實形狀：image_generation_call 項目的 result 欄位
+      if (obj.type === "image_generation_call" && typeof obj.result === "string") {
+        found.push(obj.result);
+      }
+      for (const [key, child] of Object.entries(obj)) {
         if (key === "b64_json" && typeof child === "string") {
           found.push(child);
         } else {
@@ -135,7 +143,8 @@ export class MuseClient {
     }
 
     const responseId = typeof raw.id === "string" ? raw.id : "";
-    const outputFormat = (typeof raw.output_format === "string" ? raw.output_format : "png") as OutputFormat;
+    // 實測 /v1/responses 不會回傳 output_format 欄位；未帶 output_format 參數時 Meta 端預設輸出 webp，故以此為 fallback
+    const outputFormat = (typeof raw.output_format === "string" ? raw.output_format : "webp") as OutputFormat;
 
     return {
       responseId,

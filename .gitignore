@@ -1,5 +1,7 @@
 node_modules/
 dist/
 generated-images/
+# v0.1.0 之前的舊預設輸出目錄，保留以免既有使用者本機殘留的產出被誤提交
+muse-output/
 .env
 *.log
